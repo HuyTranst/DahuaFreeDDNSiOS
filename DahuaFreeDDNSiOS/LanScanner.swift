@@ -160,7 +160,7 @@ class LanScanner: ObservableObject {
                     combined.contains("ipc-f") || combined.contains("ipc-g") ||
                     combined.contains("ipc-k") || combined.contains("ipc-s") ||
                     combined.contains("ipc-t") || combined.contains("ipc-b") ||
-                    ip.endsWith(".202") || ip == "192.168.1.202" {
+                    ip.hasSuffix(".202") || ip == "192.168.1.202" {
                     brand = .imou
                 }
 
@@ -203,7 +203,7 @@ class LanScanner: ObservableObject {
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
             var brand: CameraBrand = .unknown
-            if combined.contains("imou") || combined.contains("lechange") || ip.endsWith(".202") {
+            if combined.contains("imou") || combined.contains("lechange") || ip.hasSuffix(".202") {
                 brand = .imou
             } else if combined.contains("dahua") || combined.contains("web3.0") || combined.contains("web5.0") {
                 brand = .dahua
