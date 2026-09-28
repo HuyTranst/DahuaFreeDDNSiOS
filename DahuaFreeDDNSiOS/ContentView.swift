@@ -277,7 +277,24 @@ struct ContentView: View {
     @State private var rawFetchedConfig: String = ""
 
     private let cgiClient = DahuaCgiClient()
-    private let warrantyClient = DahuaWarrantyClient()
+    // Check Port State
+    @State private var checkPortHost: String = "192.168.1.108"
+    @State private var customPortsSpec: String = "80, 443, 554, 37777, 8000, 8080, 23, 5000, 37778, 34567"
+    @State private var isCheckingPorts: Bool = false
+    @State private var portScanResults: [PortScanResult] = []
+
+    // Date & NTP State
+    @State private var selectedDate: Date = Date()
+    @State private var enableNtp: Bool = true
+    @State private var ntpServer: String = "time.google.com"
+    @State private var ntpPort: String = "123"
+    @State private var ntpPeriod: String = "60"
+
+    // Super Password State
+    @State private var superPassDate: Date = Date()
+    @State private var superPassCode1: String = ""
+    @State private var superPassCode2: String = ""
+    @State private var superPassCode3: String = ""
 
     enum StatusType {
         case info, success, error
@@ -295,8 +312,24 @@ struct ContentView: View {
         case setDdns
         case changeIp
         case changePass
+        case rebootDevice
+        case setDateNtp
+        case checkPort
+        case superPassword
+        case qrCodeSN(String)
 
-        var id: Int { hashValue }
+        var id: String {
+            switch self {
+            case .setDdns: return "setDdns"
+            case .changeIp: return "changeIp"
+            case .changePass: return "changePass"
+            case .rebootDevice: return "rebootDevice"
+            case .setDateNtp: return "setDateNtp"
+            case .checkPort: return "checkPort"
+            case .superPassword: return "superPassword"
+            case .qrCodeSN(let sn): return "qrCodeSN_\(sn)"
+            }
+        }
     }
 
     var body: some View {
@@ -375,7 +408,7 @@ struct ContentView: View {
         }
         .actionSheet(isPresented: $showActionSheet) {
             ActionSheet(
-                title: Text("Cài đặt & Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
+                title: Text("Cài đặt & Thao tác [\(activeDevice?.ip ?? "")]"),
                 message: Text("Hãng: \(activeDevice?.brand.rawValue ?? "Camera") | S/N: \(activeDevice?.sn.isEmpty == false ? activeDevice!.sn : "N/A")"),
                 buttons: [
                     .default(Text("⚙️ Cài Đặt Free DDNS")) {
@@ -396,6 +429,29 @@ struct ContentView: View {
                         if let dev = activeDevice {
                             self.ip = dev.ip
                             self.activeModalType = .changePass
+                        }
+                    },
+                    .default(Text("🔄 Khởi động lại (Reboot)")) {
+                        if let dev = activeDevice {
+                            self.ip = dev.ip
+                            self.activeModalType = .rebootDevice
+                        }
+                    },
+                    .default(Text("🕒 Cấu hình Ngày Giờ & NTP")) {
+                        if let dev = activeDevice {
+                            self.ip = dev.ip
+                            self.activeModalType = .setDateNtp
+                        }
+                    },
+                    .default(Text("📡 Check Port thiết bị")) {
+                        if let dev = activeDevice {
+                            self.checkPortHost = dev.ip
+                            self.activeModalType = .checkPort
+                        }
+                    },
+                    .default(Text("📱 Tạo mã QR Code từ S/N")) {
+                        if let dev = activeDevice {
+                            self.activeModalType = .qrCodeSN(dev.sn.isEmpty ? dev.ip : dev.sn)
                         }
                     },
                     .default(Text("🔍 Check Bảo Hành S/N")) {
@@ -437,6 +493,55 @@ struct ContentView: View {
                 NavigationView {
                     changePassView
                         .navigationTitle("Đổi Mật Khẩu (\(ip))")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .rebootDevice:
+                NavigationView {
+                    rebootDeviceView
+                        .navigationTitle("Reboot Camera (\(ip))")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .setDateNtp:
+                NavigationView {
+                    setDateNtpView
+                        .navigationTitle("Ngày Giờ & NTP (\(ip))")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .checkPort:
+                NavigationView {
+                    checkPortView
+                        .navigationTitle("Check Port (\(checkPortHost))")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .superPassword:
+                NavigationView {
+                    superPasswordView
+                        .navigationTitle("Super Password Dahua")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .qrCodeSN(let snText):
+                NavigationView {
+                    QRCodeView(text: snText)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Đóng") { activeModalType = nil }
@@ -702,7 +807,7 @@ struct ContentView: View {
 
                 // Quick Action Cards
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Tính Năng Nổi Bật")
+                    Text("Tính Năng Nổi Bật & Tiện Ích")
                         .font(.headline)
                         .padding(.horizontal)
 
@@ -714,7 +819,20 @@ struct ContentView: View {
                             selectedTab = 3
                         }
                         QuickTile(title: "Đổi IP Camera", icon: "network", color: .green) {
-                            selectedTab = 4
+                            self.activeModalType = .changeIp
+                        }
+                    }
+                    .padding(.horizontal)
+
+                    HStack(spacing: 12) {
+                        QuickTile(title: "Check Port", icon: "antenna.radiowaves.left.and.right", color: .purple) {
+                            self.activeModalType = .checkPort
+                        }
+                        QuickTile(title: "Super Pass", icon: "lock.shield.fill", color: .red) {
+                            self.activeModalType = .superPassword
+                        }
+                        QuickTile(title: "Tạo QR S/N", icon: "qrcode", color: .orange) {
+                            self.activeModalType = .qrCodeSN("SN-SAMPLE-123456")
                         }
                     }
                     .padding(.horizontal)
@@ -1123,6 +1241,249 @@ struct ContentView: View {
         }
     }
 
+    // Modal View: Check Port
+    var checkPortView: some View {
+        Form {
+            Section(header: Text("Cấu hình IP / Tên miền kiểm tra")) {
+                HStack {
+                    Text("IP / Domain")
+                    Spacer()
+                    TextField("192.168.1.108", text: $checkPortHost)
+                        .multilineTextAlignment(.trailing)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                }
+
+                HStack {
+                    Text("Danh sách Port")
+                    Spacer()
+                    TextField("80, 443, 554, 37777...", text: $customPortsSpec)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                Button(action: executeCheckPorts) {
+                    HStack {
+                        Spacer()
+                        if isCheckingPorts {
+                            ProgressView().padding(.trailing, 8)
+                            Text("ĐANG CHECK PORT...")
+                                .bold()
+                        } else {
+                            Image(systemName: "antenna.radiowaves.left.and.right")
+                            Text("BẮT ĐẦU KIỂM TRA CỔNG PORT")
+                                .bold()
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .background(isCheckingPorts ? Color.gray : Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .disabled(isCheckingPorts)
+            }
+
+            if !portScanResults.isEmpty {
+                Section(header: Text("Kết quả Check Port (\(portScanResults.filter { $0.isOpen }.count)/\(portScanResults.count) Mở)")) {
+                    ForEach(portScanResults) { res in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Port \(res.port)")
+                                    .font(.headline)
+                                Text(res.service)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Text(res.isOpen ? "OPEN (MỞ)" : "CLOSED (ĐÓNG)")
+                                .font(.caption)
+                                .bold()
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(res.isOpen ? Color.green : Color.red.opacity(0.8))
+                                .foregroundColor(.white)
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Modal View: Super Password
+    var superPasswordView: some View {
+        Form {
+            Section(header: Text("Chọn Ngày Hiển Thị Trên Đầu Ghi Dahua")) {
+                DatePicker("Ngày tra cứu:", selection: $superPassDate, displayedComponents: .date)
+                    .datePickerStyle(GraphicalDatePickerStyle())
+                    .onChange(of: superPassDate) { newDate in
+                        calculateSuperPassword(for: newDate)
+                    }
+
+                Button(action: { calculateSuperPassword(for: superPassDate) }) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "key.fill")
+                        Text("TÍNH TOÁN SUPER PASSWORD")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+            }
+
+            if !superPassCode1.isEmpty {
+                Section(header: Text("Kết Quả Super Password (Master Dahua)")) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        SuperPassRow(title: "Super Password 1 (Mã Chuẩn 1)", code: superPassCode1)
+                        SuperPassRow(title: "Super Password 2 (Mã Chuẩn 2)", code: superPassCode2)
+                        SuperPassRow(title: "Super Pass 3 (Mã Chuẩn 3)", code: superPassCode3)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section(header: Text("Hướng dẫn sử dụng")) {
+                    Text("• Nhập các mã Super Password trên vào mục đăng nhập tài khoản 'admin' trực tiếp trên màn hình đầu ghi DVR/NVR Dahua.\n• Chú ý ngày được chọn phải trùng khớp 100% với ngày hiển thị trên màn hình TV/đầu ghi Dahua.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .onAppear {
+            calculateSuperPassword(for: superPassDate)
+        }
+    }
+
+    // Modal View: Set Date & NTP
+    var setDateNtpView: some View {
+        Form {
+            Section(header: Text("Đồng Bộ Thời Gian iPhone Sang Camera")) {
+                HStack {
+                    Text("IP Camera:")
+                    Spacer()
+                    Text(ip).bold()
+                }
+
+                Button(action: syncDeviceTimeNow) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "clock.arrow.circlepath")
+                        Text("ĐỒNG BỘ GIỜ IPHONE SANG CAMERA")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+            }
+
+            Section(header: Text("Cấu Hình NTP (Đồng Bộ Giờ Internet Tự Động)")) {
+                Toggle("Kích hoạt NTP Server", isOn: $enableNtp)
+
+                HStack {
+                    Text("NTP Server")
+                    Spacer()
+                    TextField("time.google.com", text: $ntpServer)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    Text("Cổng NTP Port")
+                    Spacer()
+                    TextField("123", text: $ntpPort)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                HStack {
+                    Text("Chu kỳ cập nhật (Phút)")
+                    Spacer()
+                    TextField("60", text: $ntpPeriod)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                Button(action: saveNtpConfig) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "gearshape.fill")
+                        Text("LƯU CẤU HÌNH NTP LÊN CAMERA")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+
+                Button(action: fetchNtpConfig) {
+                    HStack {
+                        Spacer()
+                        Text("🔍 Đọc cấu hình NTP từ Camera")
+                            .foregroundColor(.orange)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+
+    // Modal View: Reboot Device
+    var rebootDeviceView: some View {
+        Form {
+            Section(header: Text("Khởi Động Lại Thiết Bị")) {
+                HStack {
+                    Text("Địa chỉ IP Camera")
+                    Spacer()
+                    Text(ip).bold()
+                }
+
+                HStack {
+                    Text("HTTP Port")
+                    Spacer()
+                    TextField("80", text: $port)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    Text("User Camera")
+                    Spacer()
+                    TextField("admin", text: $camUser)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    Text("Pass Camera")
+                    Spacer()
+                    SecureField("Mật khẩu camera", text: $camPass)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+
+            Section {
+                Button(action: executeReboot) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                        Text("🔄 KHỞI ĐỘNG LẠI CAMERA NGAY")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                    .background(Color.red)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+            }
+        }
+    }
+
     // Serial Number Cleaning Helper Function
     private func cleanSerialNumber(_ input: String) -> String {
         var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1279,6 +1640,133 @@ struct ContentView: View {
         }
     }
 
+    private func executeCheckPorts() {
+        isCheckingPorts = true
+        portScanResults.removeAll()
+
+        let portList = customPortsSpec.components(separatedBy: CharacterSet(charactersIn: ",; "))
+            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { (1...65535).contains($0) }
+
+        let finalPorts = portList.isEmpty ? [80, 443, 554, 37777, 8000, 8080, 23, 5000, 37778, 34567] : portList
+
+        cgiClient.checkPorts(host: checkPortHost, ports: finalPorts) { results in
+            DispatchQueue.main.async {
+                self.isCheckingPorts = false
+                self.portScanResults = results
+            }
+        }
+    }
+
+    private func calculateSuperPassword(for date: Date) {
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+
+        // Formula 1
+        let res1 = (day + month * 100 + year * 10000) * 686572
+        let raw1 = String(res1)
+        let c1 = String(raw1.suffix(6))
+        superPassCode1 = String(repeating: "0", count: max(0, 6 - c1.count)) + c1
+
+        // Formula 2
+        let res2 = (day * month * (year % 2000) * 8888 % 1000000) + 1000000
+        let raw2 = String(res2)
+        let c2 = String(raw2.suffix(6))
+        superPassCode2 = String(repeating: "0", count: max(0, 6 - c2.count)) + c2
+
+        // Formula 3
+        let res3 = (day + month * 100 + year * 10000) * 283848
+        let raw3 = String(res3)
+        let c3 = String(raw3.suffix(6))
+        superPassCode3 = String(repeating: "0", count: max(0, 6 - c3.count)) + c3
+    }
+
+    private func syncDeviceTimeNow() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let timeStr = formatter.string(from: Date())
+
+        isLoading = true
+        setStatus("Đang đồng bộ giờ iPhone (\(timeStr)) sang camera...", type: .info)
+        cgiClient.setDeviceTime(ip: ip, port: port, user: camUser, pass: camPass, timeString: timeStr) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if result.success {
+                    self.setStatus("Đồng bộ giờ sang camera thành công!", type: .success)
+                } else {
+                    self.setStatus("Đồng bộ giờ thất bại: HTTP \(result.statusCode)", type: .error)
+                }
+            }
+        }
+    }
+
+    private func fetchNtpConfig() {
+        isLoading = true
+        setStatus("Đang đọc cấu hình NTP từ camera...", type: .info)
+        cgiClient.getNtpConfig(ip: ip, port: port, user: camUser, pass: camPass) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if result.success {
+                    self.setStatus("Đọc NTP thành công!", type: .success)
+                    let lines = result.rawText.components(separatedBy: .newlines)
+                    for line in lines {
+                        let parts = line.components(separatedBy: "=")
+                        if parts.count >= 2 {
+                            let k = parts[0].trimmingCharacters(in: .whitespaces)
+                            let v = parts[1].trimmingCharacters(in: .whitespaces)
+                            if k.contains(".Enable") {
+                                self.enableNtp = (v.lowercased() == "true" || v == "1")
+                            } else if k.contains(".Address") {
+                                self.ntpServer = v
+                            } else if k.contains(".Port") {
+                                self.ntpPort = v
+                            } else if k.contains(".UpdatePeriod") {
+                                self.ntpPeriod = v
+                            }
+                        }
+                    }
+                } else {
+                    self.setStatus("Lỗi đọc NTP: HTTP \(result.statusCode)", type: .error)
+                }
+            }
+        }
+    }
+
+    private func saveNtpConfig() {
+        isLoading = true
+        setStatus("Đang lưu cấu hình NTP lên camera...", type: .info)
+        let pInt = Int(ntpPort) ?? 123
+        let periodInt = Int(ntpPeriod) ?? 60
+        cgiClient.setNtpConfig(ip: ip, port: port, user: camUser, pass: camPass, enable: enableNtp, server: ntpServer, ntpPort: pInt, period: periodInt) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if result.success {
+                    self.setStatus("Đã lưu cấu hình NTP lên camera thành công!", type: .success)
+                } else {
+                    self.setStatus("Lỗi lưu NTP: HTTP \(result.statusCode)", type: .error)
+                }
+            }
+        }
+    }
+
+    private func executeReboot() {
+        isLoading = true
+        setStatus("Đang gửi lệnh Reboot camera \(ip)...", type: .info)
+        cgiClient.rebootDevice(ip: ip, port: port, user: camUser, pass: camPass) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if result.success {
+                    self.setStatus("Đã gửi lệnh khởi động lại camera \(self.ip) thành công!", type: .success)
+                    self.activeModalType = nil
+                } else {
+                    self.setStatus("Reboot thất bại: HTTP \(result.statusCode)", type: .error)
+                }
+            }
+        }
+    }
+
     private func setStatus(_ msg: String, type: StatusType) {
         self.statusMessage = msg
         self.statusType = type
@@ -1287,6 +1775,121 @@ struct ContentView: View {
     private func appendLog(_ msg: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         self.logHistory += "[\(timestamp)] \(msg)\n"
+    }
+}
+
+// MARK: - Super Password Row Component
+struct SuperPassRow: View {
+    let title: String
+    let code: String
+    @State private var copied: Bool = false
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(code)
+                    .font(.system(size: 24, weight: .bold, design: .monospaced))
+                    .foregroundColor(.orange)
+            }
+            Spacer()
+            Button(action: {
+                UIPasteboard.general.string = code
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    copied = false
+                }
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    Text(copied ? "Đã chép!" : "Sao chép")
+                        .font(.caption)
+                        .bold()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(copied ? Color.green : Color.orange)
+                .foregroundColor(.white)
+                .cornerRadius(6)
+            }
+        }
+        .padding(10)
+        .background(Color(UIColor.tertiarySystemBackground))
+        .cornerRadius(8)
+    }
+}
+
+// MARK: - QR Code Generator View Component
+struct QRCodeView: View {
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Mã QR Code S/N Thiết Bị")
+                .font(.headline)
+
+            if let qrImage = generateQRCode(from: text) {
+                Image(uiImage: qrImage)
+                    .resizable()
+                    .interpolation(.none)
+                    .scaledToFit()
+                    .frame(width: 220, height: 220)
+                    .padding(16)
+                    .background(Color.white)
+                    .cornerRadius(16)
+                    .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            } else {
+                VStack {
+                    Image(systemName: "qrcode")
+                        .font(.system(size: 60))
+                        .foregroundColor(.gray)
+                    Text("Không thể tạo mã QR")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Text(text)
+                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .foregroundColor(.blue)
+
+            Button(action: {
+                UIPasteboard.general.string = text
+            }) {
+                HStack {
+                    Image(systemName: "doc.on.doc")
+                    Text("Sao chép số S/N")
+                        .bold()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.orange.opacity(0.15))
+                .foregroundColor(.orange)
+                .cornerRadius(8)
+            }
+        }
+        .padding(24)
+    }
+
+    private func generateQRCode(from string: String) -> UIImage? {
+        guard let data = string.data(using: .utf8),
+              let filter = CIFilter(name: "CIQRCodeGenerator") else {
+            return nil
+        }
+        filter.setValue(data, forKey: "inputMessage")
+        filter.setValue("H", forKey: "inputCorrectionLevel")
+
+        guard let ciImage = filter.outputImage else { return nil }
+        let transform = CGAffineTransform(scaleX: 10, y: 10)
+        let scaledCiImage = ciImage.transformed(by: transform)
+
+        let context = CIContext()
+        if let cgImage = context.createCGImage(scaledCiImage, from: scaledCiImage.extent) {
+            return UIImage(cgImage: cgImage)
+        }
+        return nil
     }
 }
 

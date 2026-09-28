@@ -1,10 +1,18 @@
 import Foundation
+import Darwin
 
 struct CgiResult {
     let success: Bool
     let statusCode: Int
     let rawText: String
     let errorMessage: String?
+}
+
+struct PortScanResult: Identifiable {
+    let id = UUID()
+    let port: Int
+    let service: String
+    let isOpen: Bool
 }
 
 class DahuaCgiClient {
@@ -17,92 +25,148 @@ class DahuaCgiClient {
         self.session = URLSession(configuration: config)
     }
 
-    func fetchDahuaConfig(
+    // MARK: - Reboot Device
+    func rebootDevice(
         ip: String,
-        port: String,
+        port: String = "80",
         user: String,
         pass: String,
         completion: @escaping (CgiResult) -> Void
     ) {
-        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=getConfig&name=DDNS"
+        let urlString = "http://\(ip):\(port)/cgi-bin/magicBox.cgi?action=reboot"
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
 
-    func fetchDahuaDDNSConfig(
+    // MARK: - Date / Time Sync
+    func getDeviceTime(
         ip: String,
-        port: String,
+        port: String = "80",
         user: String,
         pass: String,
         completion: @escaping (CgiResult) -> Void
     ) {
-        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=getConfig&name=DDNS"
+        let urlString = "http://\(ip):\(port)/cgi-bin/global.cgi?action=getCurrentTime"
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
 
-    func saveDahuaDDNSConfig(
+    func setDeviceTime(
         ip: String,
-        port: String,
+        port: String = "80",
         user: String,
         pass: String,
-        channelIdx: String = "0",
+        timeString: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let encodedTime = timeString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? timeString
+        let urlString = "http://\(ip):\(port)/cgi-bin/global.cgi?action=setCurrentTime&time=\(encodedTime)"
+        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    // MARK: - NTP Config
+    func getNtpConfig(
+        ip: String,
+        port: String = "80",
+        user: String,
+        pass: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=getConfig&name=NTP"
+        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    func setNtpConfig(
+        ip: String,
+        port: String = "80",
+        user: String,
+        pass: String,
         enable: Bool,
-        serverAddr: String,
-        domain: String,
-        ddnsUser: String,
-        ddnsPass: String,
-        existingKeysText: String = "",
+        server: String,
+        ntpPort: Int = 123,
+        period: Int = 60,
         completion: @escaping (CgiResult) -> Void
     ) {
-        let userKey = existingKeysText.contains("table.DDNS[\(channelIdx)].UserName") ? "UserName" : "User"
-        let passKey = existingKeysText.contains("table.DDNS[\(channelIdx)].Password") ? "Password" : "Pass"
-
-        let enableStr = enable ? "true" : "false"
-        
-        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig" +
-                        "&DDNS[\(channelIdx)].Enable=\(enableStr)" +
-                        "&DDNS[\(channelIdx)].Address=\(serverAddr)" +
-                        "&DDNS[\(channelIdx)].HostName=\(domain)" +
-                        "&DDNS[\(channelIdx)].\(userKey)=\(ddnsUser)" +
-                        "&DDNS[\(channelIdx)].\(passKey)=\(ddnsPass)"
-
+        let enStr = enable ? "true" : "false"
+        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig&NTP.Enable=\(enStr)&NTP.Address=\(server)&NTP.Port=\(ntpPort)&NTP.UpdatePeriod=\(period)"
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
 
-    func changeCameraIp(
-        currentIp: String,
-        newIp: String,
-        subnetMask: String = "255.255.255.0",
-        gateway: String = "192.168.1.1",
-        user: String,
-        pass: String,
-        completion: @escaping (CgiResult) -> Void
+    // MARK: - Port Checker Engine
+    func checkPorts(
+        host: String,
+        ports: [Int] = [80, 443, 554, 37777, 37778, 8000, 8080, 23, 5000, 34567],
+        timeoutSec: Double = 1.2,
+        completion: @escaping ([PortScanResult]) -> Void
     ) {
-        let urlString = "http://\(currentIp):80/cgi-bin/configManager.cgi?action=setConfig" +
-                        "&Network.eth0.IPAddress=\(newIp)" +
-                        "&Network.eth0.SubnetMask=\(subnetMask)" +
-                        "&Network.eth0.Gateway=\(gateway)" +
-                        "&Network.eth0.DhcpEnable=false"
+        let serviceNames: [Int: String] = [
+            80: "HTTP Web Quản lý",
+            443: "HTTPS Web (SSL)",
+            554: "RTSP Luồng Video",
+            37777: "Dahua NetSDK TCP",
+            37778: "Dahua DHDiscover UDP",
+            8000: "Hikvision Private Port",
+            8080: "Alternative HTTP",
+            34567: "Xiongmai (XM) Port",
+            23: "Telnet Shell",
+            5000: "UPnP / ONVIF Media"
+        ]
 
-        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+        let cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "http://", with: "")
+            .replacingOccurrences(of: "https://", with: "")
+            .components(separatedBy: "/").first ?? host
+
+        let group = DispatchGroup()
+        var results: [PortScanResult] = []
+        let lock = NSLock()
+
+        for p in ports {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let isOpen = self.probeTcpPort(host: cleanHost, port: p, timeoutSec: timeoutSec)
+                let res = PortScanResult(
+                    port: p,
+                    service: serviceNames[p] ?? "Dịch vụ TCP",
+                    isOpen: isOpen
+                )
+                lock.lock()
+                results.append(res)
+                lock.unlock()
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            results.sort(key: { $0.port < $1.port })
+            completion(results)
+        }
     }
 
-    func changeIp(
-        ip: String,
-        port: String,
-        user: String,
-        pass: String,
-        newIp: String,
-        subnet: String = "255.255.255.0",
-        gateway: String = "192.168.1.1",
-        completion: @escaping (CgiResult) -> Void
-    ) {
-        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig" +
-                        "&Network.eth0.IPAddress=\(newIp)" +
-                        "&Network.eth0.SubnetMask=\(subnet)" +
-                        "&Network.eth0.Gateway=\(gateway)" +
-                        "&Network.eth0.DhcpEnable=false"
+    private func probeTcpPort(host: String, port: Int, timeoutSec: Double = 1.2) -> Bool {
+        let sock = socket(AF_INET, SOCK_STREAM, 0)
+        if sock < 0 { return false }
+        defer { close(sock) }
 
-        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+        var tv = timeval(tv_sec: Int(timeoutSec), tv_usec: Int32((timeoutSec.truncatingRemainder(dividingBy: 1.0)) * 1000000))
+        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+
+        if inet_pton(AF_INET, host, &addr.sin_addr) <= 0 {
+            // If domain name, try gethostbyname fallback
+            guard let hostent = gethostbyname(host) else { return false }
+            let hAddr = hostent.pointee.h_addr_list[0]!
+            memcpy(&addr.sin_addr, hAddr, Int(hostent.pointee.h_length))
+        }
+
+        let connRes = withUnsafePointer(to: &addr) { saPtrIn in
+            saPtrIn.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
+                connect(sock, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        return connRes == 0
     }
 
     func changePassword(
