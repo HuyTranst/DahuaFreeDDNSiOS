@@ -48,17 +48,13 @@ class DahuaCgiClient {
 
         let enableStr = enable ? "true" : "false"
         
-        var components = URLComponents(string: "http://\(ip):\(port)/cgi-bin/configManager.cgi")!
-        components.queryItems = [
-            URLQueryItem(name: "action", value: "setConfig"),
-            URLQueryItem(name: "DDNS[\(channelIdx)].Enable", value: enableStr),
-            URLQueryItem(name: "DDNS[\(channelIdx)].Address", value: serverAddr),
-            URLQueryItem(name: "DDNS[\(channelIdx)].HostName", value: domain),
-            URLQueryItem(name: "DDNS[\(channelIdx)].\(userKey)", value: ddnsUser),
-            URLQueryItem(name: "DDNS[\(channelIdx)].\(passKey)", value: ddnsPass)
-        ]
+        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig" +
+                        "&DDNS[\(channelIdx)].Enable=\(enableStr)" +
+                        "&DDNS[\(channelIdx)].Address=\(serverAddr)" +
+                        "&DDNS[\(channelIdx)].HostName=\(domain)" +
+                        "&DDNS[\(channelIdx)].\(userKey)=\(ddnsUser)" +
+                        "&DDNS[\(channelIdx)].\(passKey)=\(ddnsPass)"
 
-        let urlString = components.url?.absoluteString ?? ""
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
 
@@ -97,8 +93,8 @@ class DahuaCgiClient {
                 return
             }
 
-            // Received 401 Unauthorized -> Handle Authentication
-            let authHeader = httpResponse.allHeaderFields["WWW-Authenticate"] as? String ?? ""
+            // Extract WWW-Authenticate header CASE-INSENSITIVELY
+            let authHeader = self.getHeaderValue(httpResponse, name: "WWW-Authenticate") ?? ""
 
             var authedRequest = URLRequest(url: url)
             authedRequest.httpMethod = "GET"
@@ -129,6 +125,15 @@ class DahuaCgiClient {
             secondTask.resume()
         }
         task.resume()
+    }
+
+    private func getHeaderValue(_ response: HTTPURLResponse, name: String) -> String? {
+        for (key, value) in response.allHeaderFields {
+            if let keyStr = key as? String, keyStr.caseInsensitiveCompare(name) == .orderedSame {
+                return "\(value)"
+            }
+        }
+        return nil
     }
 
     private func buildDigestHeader(
@@ -168,8 +173,8 @@ class DahuaCgiClient {
     private func parseHeaderParameters(header: String) -> [String: String] {
         var map = [String: String]()
         var cleaned = header
-        if header.lowercased().hasPrefix("digest ") {
-            cleaned = String(header.dropFirst(7))
+        if let firstSpace = header.firstIndex(of: " ") {
+            cleaned = String(header[header.index(after: firstSpace)...])
         }
 
         let pairs = cleaned.components(separatedBy: ",")
@@ -177,7 +182,10 @@ class DahuaCgiClient {
             let parts = pair.components(separatedBy: "=")
             if parts.count >= 2 {
                 let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                let value = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                var value = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
+                if value.hasPrefix("\"") && value.hasSuffix("\"") && value.count >= 2 {
+                    value = String(value.dropFirst().dropLast())
+                }
                 map[key] = value
             }
         }
@@ -185,16 +193,18 @@ class DahuaCgiClient {
     }
 
     private func extractUriPath(urlString: String) -> String {
-        guard let url = URL(string: urlString) else { return "/" }
-        if let query = url.query {
-            return "\(url.path)?\(query)"
+        if let schemeRange = urlString.range(of: "://") {
+            let afterScheme = urlString[schemeRange.upperBound...]
+            if let firstSlash = afterScheme.firstIndex(of: "/") {
+                return String(afterScheme[firstSlash...])
+            }
         }
-        return url.path
+        return urlString
     }
 
     private func md5(_ string: String) -> String {
         let digest = Insecure.MD5.hash(data: Data(string.utf8))
-        return digest.map { String(format: "%02hhx", $0) }.joined()
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     private func randomHex(length: Int) -> String {
