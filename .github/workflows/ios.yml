@@ -17,7 +17,7 @@ jobs:
         with:
           xcode-version: '15.4'
 
-      - name: Find Project and Build iOS App
+      - name: Find Project & Prepare Sources
         run: |
           PROJ_PATH=$(find . -name "DahuaFreeDDNSiOS.xcodeproj" -type d | head -n 1)
           if [ -z "$PROJ_PATH" ]; then
@@ -28,6 +28,17 @@ jobs:
           echo "Found project directory at: $PROJ_DIR"
           cd "$PROJ_DIR"
 
+          # Ensure swift files exist in build directory
+          mkdir -p DahuaFreeDDNSiOS
+          for file in DahuaFreeDDNSApp.swift ContentView.swift DahuaCgiClient.swift; do
+            FOUND_FILE=$(find . -name "$file" -type f | head -n 1)
+            if [ -n "$FOUND_FILE" ]; then
+              cp "$FOUND_FILE" .
+              cp "$FOUND_FILE" DahuaFreeDDNSiOS/
+            fi
+          done
+
+          # Run xcodebuild with Auto-generated Info.plist
           xcodebuild -project DahuaFreeDDNSiOS.xcodeproj \
                      -target DahuaFreeDDNSiOS \
                      -configuration Release \
@@ -35,13 +46,11 @@ jobs:
                      -derivedDataPath build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO
+                     CODE_SIGNING_REQUIRED=NO \
+                     AD_HOC_CODE_SIGNING_ALLOWED=YES
 
           mkdir -p Payload
-          APP_PATH=$(find build -name "DahuaFreeDDNS.app" -type d | head -n 1)
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build -name "*.app" -type d | head -n 1)
-          fi
+          APP_PATH=$(find build -name "*.app" -type d | head -n 1)
           echo "Copying app from: $APP_PATH"
           cp -R "$APP_PATH" Payload/
           zip -r DahuaFreeDDNS-Real.ipa Payload
