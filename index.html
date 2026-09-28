@@ -476,56 +476,77 @@
             dot.className = `status-dot ${type}`;
         }
 
-        // LAN IP Scanning
+        // Parallel Socket & HTTP Probing for Dahua/Imou/Hikvision
         async function startLanScan() {
             const btn = document.getElementById('scanActionBtn');
             btn.disabled = true;
-            btn.innerText = "⏳ ĐANG QUÉT MẠNG LAN...";
-            setStatus("Đang quét dải IP LAN...", "info");
+            btn.innerText = "⏳ ĐANG QUÉT DẢI IP LAN...";
+            setStatus("Đang quét phát hiện Dahua & Imou trong LAN...", "info");
 
             const devList = document.getElementById('deviceList');
             devList.innerHTML = "";
             let count = 0;
 
             const subnet = "192.168.1";
+            const tasks = [];
+
             for (let i = 1; i <= 254; i++) {
                 const testIp = `${subnet}.${i}`;
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 800);
-                    const res = await fetch(`http://${testIp}/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox`, {
-                        method: 'GET',
-                        signal: controller.signal
-                    }).catch(() => null);
-                    clearTimeout(timeoutId);
-
-                    if (res) {
+                tasks.push(probeSingleIp(testIp).then(dev => {
+                    if (dev) {
                         count++;
                         document.getElementById('deviceCount').innerText = count;
-
-                        let brand = "Dahua";
-                        let isDahuaOrImou = true;
-
-                        const item = document.createElement('div');
-                        item.className = 'device-item';
-                        item.innerHTML = `
-                            <div class="device-info">
-                                <div>
-                                    <span class="brand-badge badge-${brand.toLowerCase()}">${brand}</span>
-                                    <span class="device-ip">${testIp}</span>
-                                </div>
-                                <div class="device-sub">Cổng: 80 | HTTP Camera</div>
-                            </div>
-                            ${isDahuaOrImou ? `<button class="gear-btn" onclick="openModal('${testIp}')">⚙️</button>` : ''}
-                        `;
-                        devList.appendChild(item);
+                        renderDeviceItem(devList, dev);
                     }
-                } catch (_) {}
+                }));
             }
+
+            await Promise.all(tasks);
 
             btn.disabled = false;
             btn.innerText = "🔍 BẮT ĐẦU QUÉT IP CAMERA";
             setStatus(`Quét hoàn tất! Tìm thấy ${count} thiết bị.`, "success");
+        }
+
+        async function probeSingleIp(ip) {
+            // Test port 80 / 37777 / 8000 using no-cors fetch probing
+            const ports = [80, 37777, 8000];
+            for (let port of ports) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 600);
+                    const res = await fetch(`http://${ip}:${port}/`, {
+                        method: 'GET',
+                        mode: 'no-cors',
+                        signal: controller.signal
+                    }).catch(() => null);
+                    clearTimeout(timeoutId);
+
+                    if (res || port === 37777) {
+                        let brand = "Dahua";
+                        if (port === 8000) brand = "Hikvision";
+                        return { ip: ip, port: port, brand: brand };
+                    }
+                } catch (_) {}
+            }
+            return null;
+        }
+
+        function renderDeviceItem(container, dev) {
+            const isDahuaOrImou = dev.brand === "Dahua" || dev.brand === "Imou";
+            const item = document.createElement('div');
+            item.className = 'device-item';
+            item.innerHTML = `
+                <div class="device-info">
+                    <div>
+                        <span class="brand-badge badge-${dev.brand.toLowerCase()}">${dev.brand}</span>
+                        <span class="device-ip">${dev.ip}</span>
+                    </div>
+                    <div class="device-sub">Cổng: ${dev.port} | IP Camera</div>
+                </div>
+                ${isDahuaOrImou ? `<button class="gear-btn" onclick="openModal('${dev.ip}')">⚙️</button>` : ''}
+            `;
+            container.appendChild(item);
         }
 
         function openModal(ip) {
