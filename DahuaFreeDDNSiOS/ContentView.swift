@@ -450,23 +450,27 @@ struct ContentView: View {
             }
 
             Section(header: Text("Cấu hình Free DDNS")) {
-                Picker("Server Preset", selection: $selectedPresetIndex) {
+                Picker("Server Preset", selection: Binding(
+                    get: { self.selectedPresetIndex },
+                    set: { newIdx in
+                        self.selectedPresetIndex = newIdx
+                        let preset = freeDdnsPresets[newIdx]
+                        if !preset.server.isEmpty {
+                            self.serverAddr = preset.server
+                            if self.domain.contains(".") {
+                                let prefix = self.domain.components(separatedBy: ".").first ?? "mycam"
+                                self.domain = "\(prefix).\(preset.server)"
+                            } else {
+                                self.domain = "mycam.\(preset.server)"
+                            }
+                        }
+                    }
+                )) {
                     ForEach(0..<freeDdnsPresets.count, id: \.self) { idx in
                         Text(freeDdnsPresets[idx].name).tag(idx)
                     }
                 }
-                .onChange(of: selectedPresetIndex) { newIdx in
-                    let preset = freeDdnsPresets[newIdx]
-                    if !preset.server.isEmpty {
-                        self.serverAddr = preset.server
-                        if domain.contains(".") {
-                            let prefix = domain.components(separatedBy: ".").first ?? "mycam"
-                            self.domain = "\(prefix).\(preset.server)"
-                        } else {
-                            self.domain = "mycam.\(preset.server)"
-                        }
-                    }
-                }
+
 
                 HStack {
                     Text("Server DDNS")
