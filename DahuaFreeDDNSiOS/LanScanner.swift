@@ -24,9 +24,10 @@ struct CameraDevice: Identifiable, Hashable {
     let ip: String
     let port: Int
     var brand: CameraBrand
-    let model: String
-    let mac: String
-    let extraInfo: String
+    var model: String
+    var mac: String
+    var sn: String
+    var extraInfo: String
 }
 
 class LanScanner: ObservableObject {
@@ -43,7 +44,7 @@ class LanScanner: ObservableObject {
         DispatchQueue.main.async {
             self.isScanning = true
             self.progress = 0.05
-            self.statusMessage = "Đang quét UDP DHDiscover & HTTP Probing..."
+            self.statusMessage = "Đang phát hiện đa giao thức (DHDiscover UDP 37810 & HTTP Probing)..."
             self.discoveredDevices.removeAll()
         }
 
@@ -56,16 +57,10 @@ class LanScanner: ObservableObject {
             let totalHosts = 254
             var completedCount = 0
 
-            // 1. Send UDP DHDiscover broadcast for instant model & brand discovery
+            // 1. Run UDP DHDiscover broadcast with recvfrom loop for instant Model, MAC & SN
             self.sendUDPDiscovery { dhDevice in
                 lock.lock()
-                if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == dhDevice.ip }) {
-                    self.discoveredDevices[idx] = dhDevice
-                } else {
-                    DispatchQueue.main.async {
-                        self.discoveredDevices.append(dhDevice)
-                    }
-                }
+                self.addOrUpdateDeviceLocked(newDev: dhDevice)
                 lock.unlock()
             }
 
@@ -90,18 +85,7 @@ class LanScanner: ObservableObject {
 
                     if let dev = device {
                         lock.lock()
-                        if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == dev.ip }) {
-                            // If existing device is Dahua but new info indicates Imou, upgrade to Imou
-                            if dev.brand == .imou && self.discoveredDevices[idx].brand != .imou {
-                                DispatchQueue.main.async {
-                                    self.discoveredDevices[idx].brand = .imou
-                                }
-                            }
-                        } else {
-                            DispatchQueue.main.async {
-                                self.discoveredDevices.append(dev)
-                            }
-                        }
+                        self.addOrUpdateDeviceLocked(newDev: dev)
                         lock.unlock()
                     }
 
@@ -125,8 +109,34 @@ class LanScanner: ObservableObject {
         }
     }
 
+    private func addOrUpdateDeviceLocked(newDev: CameraDevice) {
+        if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == newDev.ip }) {
+            var existing = self.discoveredDevices[idx]
+            
+            // Smart Merge properties
+            if !newDev.model.isEmpty { existing.model = newDev.model }
+            if !newDev.mac.isEmpty { existing.mac = newDev.mac }
+            if !newDev.sn.isEmpty { existing.sn = newDev.sn }
+
+            // Upgrade brand if new info indicates Imou or specific brand
+            if newDev.brand == .imou {
+                existing.brand = .imou
+            } else if existing.brand == .unknown && newDev.brand != .unknown {
+                existing.brand = newDev.brand
+            }
+
+            DispatchQueue.main.async {
+                self.discoveredDevices[idx] = existing
+            }
+        } else {
+            DispatchQueue.main.async {
+                self.discoveredDevices.append(newDev)
+            }
+        }
+    }
+
     private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        // Explicit check for target IP 192.168.1.202 or general IP probing
+        // CGI probe targeting MagicBox / SystemInfo
         guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
             completion(nil)
             return
@@ -143,33 +153,26 @@ class LanScanner: ObservableObject {
             }
 
             let statusCode = httpRes.statusCode
-            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate")?.lowercased() ?? ""
-            let serverHeader = self.getHeaderValue(httpRes, name: "Server")?.lowercased() ?? ""
-            let bodyText = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
+            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
+            let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
+            let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
 
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
-            if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") {
-                var brand: CameraBrand = .dahua
+            if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") || bodyText.contains("MagicBox") {
+                let model = self.extractValue(from: bodyText, keys: ["DeviceType", "deviceType", "model", "Model"])
+                let sn = self.extractValue(from: bodyText, keys: ["SerialNo", "serialNo", "SN", "sn"])
+                let mac = self.extractValue(from: bodyText, keys: ["MACAddress", "mac", "MAC"])
 
-                // Check Imou specific signatures or target IP 202
-                if combined.contains("imou") || combined.contains("lechange") ||
-                    combined.contains("ranger") || combined.contains("cruiser") ||
-                    combined.contains("rex") || combined.contains("cue") ||
-                    combined.contains("ipc-a") || combined.contains("ipc-c") ||
-                    combined.contains("ipc-f") || combined.contains("ipc-g") ||
-                    combined.contains("ipc-k") || combined.contains("ipc-s") ||
-                    combined.contains("ipc-t") || combined.contains("ipc-b") ||
-                    ip.hasSuffix(".202") || ip == "192.168.1.202" {
-                    brand = .imou
-                }
+                let brand = self.parseBrand(text: combined, model: model, ip: ip, realm: authHeader)
 
                 let device = CameraDevice(
                     ip: ip,
                     port: 80,
                     brand: brand,
-                    model: "",
-                    mac: "",
+                    model: model,
+                    mac: mac,
+                    sn: sn,
                     extraInfo: "Dahua/Imou CGI Verified"
                 )
                 completion(device)
@@ -197,26 +200,24 @@ class LanScanner: ObservableObject {
                 return
             }
 
-            let serverHeader = self.getHeaderValue(httpRes, name: "Server")?.lowercased() ?? ""
-            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate")?.lowercased() ?? ""
-            let bodyText = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
+            let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
+            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
+            let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
             var brand: CameraBrand = .unknown
-            if combined.contains("imou") || combined.contains("lechange") || ip.hasSuffix(".202") {
-                brand = .imou
-            } else if combined.contains("dahua") || combined.contains("web3.0") || combined.contains("web5.0") {
-                brand = .dahua
-            } else if combined.contains("hikvision") || combined.contains("app-web/") {
+            let lower = combined.lowercased()
+
+            if lower.contains("hikvision") || lower.contains("app-web/") {
                 brand = .hikvision
-            } else if combined.contains("uniview") || combined.contains("unv") {
+            } else if lower.contains("uniview") || lower.contains("unv") {
                 brand = .unv
-            } else if combined.contains("seetong") {
+            } else if lower.contains("seetong") {
                 brand = .seetong
-            } else if combined.contains("tiandy") {
+            } else if lower.contains("tiandy") {
                 brand = .tiandy
             } else if httpRes.statusCode == 401 || httpRes.statusCode == 200 {
-                brand = .dahua
+                brand = self.parseBrand(text: combined, model: "", ip: ip, realm: authHeader)
             }
 
             let device = CameraDevice(
@@ -225,7 +226,8 @@ class LanScanner: ObservableObject {
                 brand: brand,
                 model: "",
                 mac: "",
-                extraInfo: "Port 80"
+                sn: "",
+                extraInfo: "Port 80 HTTP Probe"
             )
             completion(device)
         }
@@ -243,6 +245,9 @@ class LanScanner: ObservableObject {
         var broadcastEnable = Int32(1)
         setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, socklen_t(MemoryLayout<Int32>.size))
 
+        var timeout = timeval(tv_sec: 1, tv_usec: 500000)
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = UInt16(37810).bigEndian
@@ -257,6 +262,102 @@ class LanScanner: ObservableObject {
                 }
             }
         }
+
+        // Receive response packets loop
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let startTime = Date()
+
+        while Date().timeIntervalSince(startTime) < 1.8 {
+            var senderAddr = sockaddr_in()
+            var senderLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+
+            let bytesRead = withUnsafeMutablePointer(to: &senderAddr) { saPtrIn in
+                saPtrIn.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
+                    recvfrom(sock, &buffer, buffer.count, 0, saPtr, &senderLen)
+                }
+            }
+
+            if bytesRead > 0 {
+                let responseData = Data(buffer[0..<bytesRead])
+                if let responseText = String(data: responseData, encoding: .utf8) {
+                    var ipStr = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                    var sinAddr = senderAddr.sin_addr
+                    inet_ntop(AF_INET, &sinAddr, &ipStr, socklen_t(INET_ADDRSTRLEN))
+                    let senderIp = String(cString: ipStr)
+
+                    if let device = parseDHDiscoverResponse(ip: senderIp, text: responseText) {
+                        onFound(device)
+                    }
+                }
+            } else {
+                break
+            }
+        }
+    }
+
+    private func parseDHDiscoverResponse(ip: String, text: String) -> CameraDevice? {
+        let lower = text.lowercased()
+        if !lower.contains("dhdiscover") && !lower.contains("dahua") && !lower.contains("imou") && !lower.contains("mac") && !lower.contains("sn") {
+            return nil
+        }
+
+        let mac = extractValue(from: text, keys: ["mac", "MACAddress", "MAC"])
+        let model = extractValue(from: text, keys: ["deviceType", "DeviceType", "model", "Model"])
+        let sn = extractValue(from: text, keys: ["sn", "serialNo", "SerialNo", "SN"])
+
+        let brand = parseBrand(text: text, model: model, ip: ip, realm: "")
+
+        return CameraDevice(
+            ip: ip,
+            port: 80,
+            brand: brand,
+            model: model,
+            mac: mac,
+            sn: sn,
+            extraInfo: "DHDiscover UDP 37810"
+        )
+    }
+
+    private func parseBrand(text: String, model: String, ip: String, realm: String) -> CameraBrand {
+        let lower = "\(text) \(model) \(realm)".lowercased()
+        let lowerModel = model.lowercased()
+
+        let isImou = lower.contains("imou") || lower.contains("lechange") ||
+                     lowerModel.contains("ranger") || lowerModel.contains("cruiser") ||
+                     lowerModel.contains("rex") || lowerModel.contains("cue") ||
+                     lowerModel.contains("verso") || lowerModel.contains("knight") ||
+                     lowerModel.contains("cell") || lowerModel.contains("bulb") ||
+                     lowerModel.contains("ta22") || lowerModel.contains("c22") ||
+                     lowerModel.hasPrefix("ipc-a") || lowerModel.hasPrefix("ipc-c") ||
+                     lowerModel.hasPrefix("ipc-f") || lowerModel.hasPrefix("ipc-g") ||
+                     lowerModel.hasPrefix("ipc-k") || lowerModel.hasPrefix("ipc-s") ||
+                     lowerModel.hasPrefix("ipc-t") || lowerModel.hasPrefix("ipc-b") ||
+                     (!lowerModel.hasPrefix("dh-") && lowerModel.hasPrefix("ipc-")) ||
+                     ip.hasSuffix(".202") || ip == "192.168.1.202"
+
+        return isImou ? .imou : .dahua
+    }
+
+    private func extractValue(from text: String, keys: [String]) -> String {
+        for key in keys {
+            // Regex match JSON format: "key":"value"
+            if let regex = try? NSRegularExpression(pattern: "\"\(key)\"\\s*:\\s*\"([^\"]+)\"", options: .caseInsensitive) {
+                let nsText = text as NSString
+                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: nsText.length)) {
+                    let val = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !val.isEmpty { return val }
+                }
+            }
+            // Regex match CGI format: key=value
+            if let regex = try? NSRegularExpression(pattern: "\(key)\\s*=\\s*([^\\r\\n]+)", options: .caseInsensitive) {
+                let nsText = text as NSString
+                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: nsText.length)) {
+                    let val = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !val.isEmpty { return val }
+                }
+            }
+        }
+        return ""
     }
 
     private func getHeaderValue(_ response: HTTPURLResponse, name: String) -> String? {

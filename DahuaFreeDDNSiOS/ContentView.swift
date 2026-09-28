@@ -202,36 +202,55 @@ struct ContentView: View {
                     ForEach(0..<scanner.discoveredDevices.count, id: \.self) { idx in
                         let dev = scanner.discoveredDevices[idx]
                         HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Button(action: {
-                                        // Tap badge to toggle brand between Dahua and Imou
-                                        if scanner.discoveredDevices[idx].brand == .dahua {
-                                            scanner.discoveredDevices[idx].brand = .imou
-                                        } else if scanner.discoveredDevices[idx].brand == .imou {
-                                            scanner.discoveredDevices[idx].brand = .dahua
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack {
+                                        Button(action: {
+                                            // Tap badge to toggle brand between Dahua and Imou
+                                            if scanner.discoveredDevices[idx].brand == .dahua {
+                                                scanner.discoveredDevices[idx].brand = .imou
+                                            } else if scanner.discoveredDevices[idx].brand == .imou {
+                                                scanner.discoveredDevices[idx].brand = .dahua
+                                            }
+                                        }) {
+                                            Text("\(dev.brand.rawValue) 🔄")
+                                                .font(.caption)
+                                                .bold()
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 3)
+                                                .background(badgeColor(for: dev.brand))
+                                                .foregroundColor(.white)
+                                                .cornerRadius(6)
                                         }
-                                    }) {
-                                        Text(dev.brand.rawValue)
-                                            .font(.caption)
-                                            .bold()
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 2)
-                                            .background(badgeColor(for: dev.brand))
-                                            .foregroundColor(.white)
-                                            .cornerRadius(6)
+
+                                        Text("\(dev.ip):\(dev.port)")
+                                            .font(.headline)
                                     }
 
-                                    Text(dev.ip)
-                                        .font(.headline)
-                                }
+                                    if !dev.sn.isEmpty {
+                                        Text("S/N: \(dev.sn)")
+                                            .font(.caption)
+                                            .bold()
+                                            .foregroundColor(.blue)
+                                    }
 
-                                if !dev.extraInfo.isEmpty {
-                                    Text("Cổng: \(dev.port) | \(dev.extraInfo)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                                    if !dev.model.isEmpty {
+                                        Text("Model: \(dev.model)")
+                                            .font(.caption)
+                                            .foregroundColor(.primary)
+                                    }
+
+                                    if !dev.mac.isEmpty {
+                                        Text("MAC: \(dev.mac)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    if !dev.extraInfo.isEmpty {
+                                        Text("Giao thức: \(dev.extraInfo)")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
                                 }
-                            }
 
                             Spacer()
 

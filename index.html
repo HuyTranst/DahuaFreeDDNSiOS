@@ -567,13 +567,18 @@
         function renderDeviceItem(container, dev) {
             const item = document.createElement('div');
             item.className = 'device-item';
+            let extraStr = `Cổng: ${dev.port || 80}`;
+            if (dev.sn) extraStr += ` | S/N: <b>${dev.sn}</b>`;
+            if (dev.model) extraStr += ` | Model: ${dev.model}`;
+            if (dev.mac) extraStr += ` | MAC: ${dev.mac}`;
+
             item.innerHTML = `
                 <div class="device-info">
                     <div>
                         <span class="brand-badge badge-${dev.brand.toLowerCase()}" onclick="toggleBrand('${dev.ip}')">${dev.brand} 🔄</span>
                         <span class="device-ip">${dev.ip}</span>
                     </div>
-                    <div class="device-sub">Cổng: ${dev.port} | Dahua/Imou Verified</div>
+                    <div class="device-sub">${extraStr}</div>
                 </div>
                 <button class="gear-btn" onclick="openModal('${dev.ip}')">⚙️</button>
             `;
