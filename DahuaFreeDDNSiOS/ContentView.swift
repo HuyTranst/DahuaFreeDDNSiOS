@@ -434,15 +434,15 @@ struct ContentView: View {
             }
             .tag(2)
 
-            // Tab 4: Dễ Cấu Hình
+            // Tab 4: Cấu Hình
             NavigationView {
                 ddnsFormView
-                    .navigationTitle("Dễ Cấu Hình Free DDNS")
+                    .navigationTitle("Cấu Hình Free DDNS")
                     .navigationBarTitleDisplayMode(.inline)
             }
             .tabItem {
                 Image(systemName: "gearshape.2.fill")
-                Text("Dễ Cấu Hình")
+                Text("Cấu Hình")
             }
             .tag(3)
 
@@ -585,7 +585,8 @@ struct ContentView: View {
             case .setDateNtp:
                 NavigationView {
                     setDateNtpView
-                        .navigationTitle("Ngày Giờ & NTP")
+                        .navigationTitle("Cấu Hình Ngày Giờ & NTP")
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Đóng") { activeModalType = nil }
@@ -593,11 +594,21 @@ struct ContentView: View {
                         }
                 }
             case .checkPort:
-                checkPortModalView
+                NavigationView {
+                    checkPortModalView
+                        .navigationTitle("Kiểm Tra Cổng (Check Port)")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
             case .superPassword:
                 NavigationView {
                     superPasswordView
                         .navigationTitle("Super Password Dahua")
+                        .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Đóng") { activeModalType = nil }
@@ -605,9 +616,27 @@ struct ContentView: View {
                         }
                 }
             case .qrCodeGenerator:
-                qrCodeGeneratorModalView
+                NavigationView {
+                    qrCodeGeneratorModalView
+                        .navigationTitle("Tạo Mã QR Code Cài Đặt")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
             case .rtspOnvif:
-                rtspOnvifModalView
+                NavigationView {
+                    rtspOnvifModalView
+                        .navigationTitle("Tạo Link RTSP & Onvif")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
             }
         }
     }
@@ -878,7 +907,7 @@ struct ContentView: View {
                         QuickTile(title: "Cấu Hình DDNS", icon: "gearshape.2.fill", color: .blue) {
                             selectedTab = 3
                         }
-                        QuickTile(title: "RTSP & Onvif", icon: "video.badge.waveform", color: .orange) {
+                        QuickTile(title: "RTSP & Onvif", icon: "video.fill", color: .orange) {
                             self.activeModalType = .rtspOnvif
                         }
                     }
@@ -1017,7 +1046,7 @@ struct ContentView: View {
         .listStyle(GroupedListStyle())
     }
 
-    // TAB 3: Dễ Cấu Hình (Free DDNS Form View)
+    // TAB 3: Cấu Hình (Free DDNS Form View)
     var ddnsFormView: some View {
         Form {
             Section(header: Text("Thông tin Camera Dahua / Imou")) {
@@ -1301,495 +1330,295 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Modal View: Check Port (Matching Screenshot 1)
+    // MARK: - Modal View: Check Port (Form Style matching Super Password)
     var checkPortModalView: some View {
-        NavigationView {
-            ZStack {
-                Color(red: 0.05, green: 0.07, blue: 0.12).edgesIgnoringSafeArea(.all)
+        Form {
+            Section(header: Text("1. Địa Chỉ IP WAN Công Cộng")) {
+                HStack {
+                    Text("IP WAN:")
+                    Spacer()
+                    Text(currentWanIp)
+                        .font(.system(.subheadline, design: .monospaced))
+                        .bold()
+                        .foregroundColor(.blue)
+                }
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // 1. Top Banner: WAN IP Public
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(alignment: .center) {
-                                Image(systemName: "globe")
-                                    .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-                                    .font(.title3)
-
-                                Text("Địa chỉ IP WAN công cộng của bạn:")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-
-                                Text(currentWanIp)
-                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
-                                    .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-
-                                Spacer()
-
-                                Button(action: fetchWanIp) {
-                                    HStack(spacing: 4) {
-                                        if isLoadingWanIp {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                .scaleEffect(0.8)
-                                        } else {
-                                            Image(systemName: "arrow.clockwise")
-                                                .font(.caption)
-                                        }
-                                        Text("Tải lại WAN IP")
-                                            .font(.caption)
-                                            .bold()
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color(red: 0.08, green: 0.38, blue: 0.58))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(6)
-                                }
-
-                                Button(action: fillWanIp) {
-                                    Text("Điền IP WAN")
-                                        .font(.caption)
-                                        .bold()
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(Color(red: 0.06, green: 0.65, blue: 0.45))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(6)
-                                }
-                            }
-                        }
-                        .padding(14)
-                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(red: 0.14, green: 0.25, blue: 0.38), lineWidth: 1)
-                        )
-
-                        // 2. Target IP / Domain & LAN device selection
-                        VStack(spacing: 12) {
-                            HStack(spacing: 12) {
-                                // LAN Device Dropdown
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Hoặc chọn thiết bị từ mạng LAN:")
-                                        .font(.caption)
-                                        .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-
-                                    Menu {
-                                        Button("-- [Tự do nhập IP/WAN] hoặc Chọn thiết bị --") {
-                                            selectedLanDeviceForPort = ""
-                                        }
-                                        ForEach(scanner.discoveredDevices) { dev in
-                                            Button("\(dev.ip) - \(dev.brand.rawValue) (\(dev.model.isEmpty ? dev.mac : dev.model))") {
-                                                selectedLanDeviceForPort = dev.ip
-                                                checkPortHost = dev.ip
-                                            }
-                                        }
-                                    } label: {
-                                        HStack {
-                                            Text(selectedLanDeviceForPort.isEmpty ? "-- [Tự do nhập IP/WAN] hoặc Chọn thiết bị --" : selectedLanDeviceForPort)
-                                                .font(.caption)
-                                                .foregroundColor(.white)
-                                                .lineLimit(1)
-                                            Spacer()
-                                            Image(systemName: "chevron.down")
-                                                .font(.caption2)
-                                                .foregroundColor(.gray)
-                                        }
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 10)
-                                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                        .cornerRadius(6)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6)
-                                                .stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1)
-                                        )
-                                    }
-                                }
-
-                                // Target Host Input
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text("*")
-                                            .foregroundColor(.cyan)
-                                        Text("Địa chỉ IP / Tên miền kiểm tra:")
-                                            .font(.caption)
-                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-                                    }
-
-                                    HStack {
-                                        TextField("VD: 27.64.170.126 hoặc domain.ddns", text: $checkPortHost)
-                                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .autocapitalization(.none)
-                                            .disableAutocorrection(true)
-
-                                        if !checkPortHost.isEmpty {
-                                            Button(action: { checkPortHost = "" }) {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .foregroundColor(.gray)
-                                            }
-                                        }
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 9)
-                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1)
-                                    )
-                                }
-                            }
-                        }
-                        .padding(14)
-                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
-                        )
-
-                        // 3. Ports Input Cards (Ports 1 to 4)
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("CÁC CỔNG CẦN KIỂM TRA (PORTS):")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Text("Gợi ý các cổng camera phổ biến")
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
-                            }
-
-                            // 4 Port Cards Row
-                            HStack(spacing: 8) {
-                                PortCardItem(label: "Cổng 1 (Dahua TCP)", text: $cpPort1)
-                                PortCardItem(label: "Cổng 2 (HTTP Web)", text: $cpPort2)
-                                PortCardItem(label: "Cổng 3 (RTSP Stream)", text: $cpPort3)
-                                PortCardItem(label: "Cổng 4 (Hikvision SDK)", text: $cpPort4)
-                            }
-
-                            // Preset Pills Row
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    Button(action: {
-                                        cpPort1 = "37777"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = ""
-                                    }) {
-                                        Text("⭐ Bộ Dahua (37777, 80, 554)")
-                                            .font(.caption2)
-                                            .bold()
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color(red: 0.09, green: 0.22, blue: 0.36))
-                                            .foregroundColor(.cyan)
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.4), lineWidth: 1))
-                                    }
-
-                                    Button(action: {
-                                        cpPort1 = "8000"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = "443"
-                                    }) {
-                                        Text("⭐ Bộ Hikvision (8000, 80, 554, 443)")
-                                            .font(.caption2)
-                                            .bold()
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color(red: 0.28, green: 0.2, blue: 0.08))
-                                            .foregroundColor(.orange)
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.4), lineWidth: 1))
-                                    }
-
-                                    Button(action: {
-                                        cpPort1 = "34567"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = ""
-                                    }) {
-                                        Text("⭐ Bộ Xiongmai / XM (34567, 80, 554)")
-                                            .font(.caption2)
-                                            .bold()
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color(red: 0.22, green: 0.12, blue: 0.32))
-                                            .foregroundColor(Color(red: 0.8, green: 0.5, blue: 0.95))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.purple.opacity(0.4), lineWidth: 1))
-                                    }
-
-                                    Button(action: {
-                                        cpPort1 = "80"; cpPort2 = "443"; cpPort3 = "8080"; cpPort4 = ""
-                                    }) {
-                                        Text("Web Ports (80, 443, 8080)")
-                                            .font(.caption2)
-                                            .bold()
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color(red: 0.12, green: 0.16, blue: 0.24))
-                                            .foregroundColor(.white)
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.4), lineWidth: 1))
-                                    }
-                                }
-                            }
-                        }
-                        .padding(14)
-                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
-                        )
-
-                        // 4. Main Check Button
-                        Button(action: executeCheckPorts) {
-                            HStack {
-                                Spacer()
-                                if isCheckingPorts {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .padding(.trailing, 8)
-                                    Text("Đang kiểm tra...")
-                                        .font(.headline)
-                                        .bold()
-                                } else {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.headline)
-                                    Text("Kiểm Tra Cổng")
-                                        .font(.headline)
-                                        .bold()
-                                }
-                                Spacer()
-                            }
-                            .frame(height: 48)
-                            .background(Color(red: 0.06, green: 0.65, blue: 0.45))
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .shadow(color: Color(red: 0.06, green: 0.65, blue: 0.45).opacity(0.3), radius: 6, x: 0, y: 3)
-                        }
-                        .disabled(isCheckingPorts)
-
-                        // 5. Results Table Section
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("Kết quả kiểm tra cổng mở:")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(.white)
-
-                                Spacer()
-
-                                if hasCheckedPorts {
-                                    let openCount = portScanResults.filter { $0.isOpen }.count
-                                    if openCount > 0 {
-                                        Text("🟢 Có \(openCount) / \(portScanResults.count) cổng MỞ")
-                                            .font(.caption)
-                                            .bold()
-                                            .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-                                    } else {
-                                        Text("🔴 0 / \(portScanResults.count) cổng Mở (Tất cả ĐÓNG)")
-                                            .font(.caption)
-                                            .bold()
-                                            .foregroundColor(Color(red: 0.95, green: 0.35, blue: 0.35))
-                                    }
-                                }
-                            }
-
-                            // Table Header
-                            HStack {
-                                Text("IP / Tên miền")
-                                    .font(.caption2)
-                                    .bold()
-                                    .foregroundColor(.gray)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text("Cổng")
-                                    .font(.caption2)
-                                    .bold()
-                                    .foregroundColor(.gray)
-                                    .frame(width: 50, alignment: .center)
-                                Text("Dịch vụ")
-                                    .font(.caption2)
-                                    .bold()
-                                    .foregroundColor(.gray)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text("Trạng thái")
-                                    .font(.caption2)
-                                    .bold()
-                                    .foregroundColor(.gray)
-                                    .frame(width: 85, alignment: .center)
-                                Text("Truy cập nhanh")
-                                    .font(.caption2)
-                                    .bold()
-                                    .foregroundColor(.gray)
-                                    .frame(width: 80, alignment: .trailing)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(Color(red: 0.06, green: 0.09, blue: 0.15))
-                            .cornerRadius(6)
-
-                            if portScanResults.isEmpty {
-                                HStack {
-                                    Spacer()
-                                    Text(hasCheckedPorts ? "Không tìm thấy cổng nào." : "Nhập IP / Port và bấm [Kiểm Tra Cổng] để xem kết quả.")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                        .padding(.vertical, 16)
-                                    Spacer()
-                                }
-                            } else {
-                                ForEach(portScanResults) { res in
-                                    HStack {
-                                        Text(res.host)
-                                            .font(.caption2)
-                                            .foregroundColor(.white)
-                                            .lineLimit(1)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        Text("\(res.port)")
-                                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                                            .foregroundColor(Color(red: 0.4, green: 0.8, blue: 1.0))
-                                            .frame(width: 50, alignment: .center)
-
-                                        Text(res.service)
-                                            .font(.caption2)
-                                            .foregroundColor(Color(red: 0.8, green: 0.85, blue: 0.95))
-                                            .lineLimit(1)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        if res.isOpen {
-                                            Text("🟢 Mở (Open)")
-                                                .font(.system(size: 10, weight: .bold))
-                                                .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 3)
-                                                .background(Color(red: 0.2, green: 0.83, blue: 0.6).opacity(0.15))
-                                                .cornerRadius(4)
-                                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(red: 0.2, green: 0.83, blue: 0.6).opacity(0.4), lineWidth: 1))
-                                                .frame(width: 85, alignment: .center)
-                                        } else {
-                                            Text("🔴 Đóng (Closed)")
-                                                .font(.system(size: 10, weight: .semibold))
-                                                .foregroundColor(Color(red: 0.95, green: 0.4, blue: 0.4))
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 3)
-                                                .background(Color(red: 0.95, green: 0.4, blue: 0.4).opacity(0.12))
-                                                .cornerRadius(4)
-                                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(red: 0.95, green: 0.4, blue: 0.4).opacity(0.3), lineWidth: 1))
-                                                .frame(width: 85, alignment: .center)
-                                        }
-
-                                        // Quick Action Button
-                                        if res.isOpen {
-                                            if res.port == 80 || res.port == 8080 {
-                                                Button(action: {
-                                                    if let url = URL(string: "http://\(res.host):\(res.port)") {
-                                                        UIApplication.shared.open(url)
-                                                    }
-                                                }) {
-                                                    Text("🌐 Mở Web")
-                                                        .font(.system(size: 10, weight: .bold))
-                                                        .padding(.horizontal, 6)
-                                                        .padding(.vertical, 3)
-                                                        .background(Color.blue)
-                                                        .foregroundColor(.white)
-                                                        .cornerRadius(4)
-                                                }
-                                                .frame(width: 80, alignment: .trailing)
-                                            } else if res.port == 443 {
-                                                Button(action: {
-                                                    if let url = URL(string: "https://\(res.host):\(res.port)") {
-                                                        UIApplication.shared.open(url)
-                                                    }
-                                                }) {
-                                                    Text("🔒 Mở Web")
-                                                        .font(.system(size: 10, weight: .bold))
-                                                        .padding(.horizontal, 6)
-                                                        .padding(.vertical, 3)
-                                                        .background(Color.blue)
-                                                        .foregroundColor(.white)
-                                                        .cornerRadius(4)
-                                                }
-                                                .frame(width: 80, alignment: .trailing)
-                                            } else if res.port == 554 {
-                                                Button(action: {
-                                                    let rtspUrl = "rtsp://admin:admin123@\(res.host):\(res.port)/cam/realmonitor?channel=1&subtype=0"
-                                                    UIPasteboard.general.string = rtspUrl
-                                                }) {
-                                                    Text("📺 RTSP")
-                                                        .font(.system(size: 10, weight: .bold))
-                                                        .padding(.horizontal, 6)
-                                                        .padding(.vertical, 3)
-                                                        .background(Color.orange)
-                                                        .foregroundColor(.white)
-                                                        .cornerRadius(4)
-                                                }
-                                                .frame(width: 80, alignment: .trailing)
-                                            } else {
-                                                Text("Sẵn sàng")
-                                                    .font(.system(size: 10, weight: .bold))
-                                                    .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-                                                    .frame(width: 80, alignment: .trailing)
-                                            }
-                                        } else {
-                                            Text("-")
-                                                .font(.caption)
-                                                .foregroundColor(.gray)
-                                                .frame(width: 80, alignment: .trailing)
-                                        }
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color(red: 0.08, green: 0.12, blue: 0.19))
-                                    .cornerRadius(6)
-                                }
-                            }
-                        }
-                        .padding(14)
-                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
-                        )
-
-                        // Bottom Close Button
+                HStack(spacing: 12) {
+                    Button(action: fetchWanIp) {
                         HStack {
                             Spacer()
-                            Button(action: { activeModalType = nil }) {
-                                Text("Đóng")
-                                    .font(.subheadline)
-                                    .bold()
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 8)
-                                    .background(Color(red: 0.12, green: 0.16, blue: 0.24))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                            if isLoadingWanIp {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
                             }
+                            Text("Tải lại WAN IP")
+                                .font(.footnote)
+                                .bold()
+                            Spacer()
                         }
-                        .padding(.top, 4)
+                        .padding(.vertical, 8)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                     }
-                    .padding()
+                    .buttonStyle(BorderlessButtonStyle())
+
+                    Button(action: fillWanIp) {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Điền IP WAN")
+                                .font(.footnote)
+                                .bold()
+                            Spacer()
+                        }
+                        .padding(.vertical, 8)
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section(header: Text("2. Mục Tiêu Kiểm Tra (IP / Tên Miền)")) {
+                if !scanner.discoveredDevices.isEmpty {
+                    Picker("Chọn từ mạng LAN:", selection: $selectedLanDeviceForPort) {
+                        Text("-- Chọn thiết bị LAN --").tag("")
+                        ForEach(scanner.discoveredDevices) { dev in
+                            Text("\(dev.ip) - \(dev.brand.rawValue)").tag(dev.ip)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: selectedLanDeviceForPort) { val in
+                        if !val.isEmpty {
+                            checkPortHost = val
+                        }
+                    }
+                }
+
+                HStack {
+                    Text("Host / IP:")
+                    Spacer()
+                    TextField("VD: 27.64.170.126 hoặc domain.ddns", text: $checkPortHost)
+                        .multilineTextAlignment(.trailing)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
                 }
             }
-            .navigationBarTitle("Kiểm Tra Cổng Mở (Port Checker) WAN / LAN / Tên Miền", displayMode: .inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(action: { activeModalType = nil }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
+
+            Section(header: Text("3. Các Cổng Cần Kiểm Tra (Ports)")) {
+                HStack {
+                    Text("Cổng 1 (TCP)")
+                    Spacer()
+                    TextField("37777", text: $cpPort1)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+                HStack {
+                    Text("Cổng 2 (HTTP)")
+                    Spacer()
+                    TextField("80", text: $cpPort2)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+                HStack {
+                    Text("Cổng 3 (RTSP)")
+                    Spacer()
+                    TextField("554", text: $cpPort3)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+                HStack {
+                    Text("Cổng 4 (Khác)")
+                    Spacer()
+                    TextField("443", text: $cpPort4)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        Button("⭐ Dahua (37777, 80, 554)") {
+                            cpPort1 = "37777"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = ""
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.orange.opacity(0.15))
+                        .foregroundColor(.orange)
+                        .cornerRadius(6)
+
+                        Button("⭐ Hikvision (8000, 80, 554, 443)") {
+                            cpPort1 = "8000"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = "443"
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.red.opacity(0.15))
+                        .foregroundColor(.red)
+                        .cornerRadius(6)
+
+                        Button("⭐ XM (34567, 80, 554)") {
+                            cpPort1 = "34567"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = ""
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.purple.opacity(0.15))
+                        .foregroundColor(.purple)
+                        .cornerRadius(6)
+
+                        Button("Web (80, 443, 8080)") {
+                            cpPort1 = "80"; cpPort2 = "443"; cpPort3 = "8080"; cpPort4 = ""
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .cornerRadius(6)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Button(action: executeCheckPorts) {
+                    HStack {
+                        Spacer()
+                        if isCheckingPorts {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .padding(.trailing, 6)
+                            Text("ĐANG KIỂM TRA...")
+                                .bold()
+                        } else {
+                            Image(systemName: "magnifyingglass")
+                            Text("KIỂM TRA CỔNG")
+                                .bold()
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .disabled(isCheckingPorts)
+                .buttonStyle(BorderlessButtonStyle())
+            }
+
+            if hasCheckedPorts {
+                Section(header: Text("4. Kết Quả Kiểm Tra Cổng")) {
+                    if portScanResults.isEmpty {
+                        Text("Không có cổng nào được kiểm tra.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(portScanResults) { res in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack {
+                                        Text("\(res.port)")
+                                            .font(.system(.headline, design: .monospaced))
+                                            .bold()
+                                        Text("(\(res.service))")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Text(res.host)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                if res.isOpen {
+                                    Text("🟢 MỞ")
+                                        .font(.caption)
+                                        .bold()
+                                        .foregroundColor(.green)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.green.opacity(0.12))
+                                        .cornerRadius(6)
+
+                                    if res.port == 80 || res.port == 8080 {
+                                        Button(action: {
+                                            if let url = URL(string: "http://\(res.host):\(res.port)") {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        }) {
+                                            Text("Mở Web")
+                                                .font(.caption2)
+                                                .bold()
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.blue)
+                                                .foregroundColor(.white)
+                                                .cornerRadius(6)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                    } else if res.port == 443 {
+                                        Button(action: {
+                                            if let url = URL(string: "https://\(res.host):\(res.port)") {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        }) {
+                                            Text("Mở Web")
+                                                .font(.caption2)
+                                                .bold()
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.blue)
+                                                .foregroundColor(.white)
+                                                .cornerRadius(6)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                    } else if res.port == 554 {
+                                        Button(action: {
+                                            let rtspUrl = "rtsp://admin:admin123@\(res.host):\(res.port)/cam/realmonitor?channel=1&subtype=0"
+                                            UIPasteboard.general.string = rtspUrl
+                                        }) {
+                                            Text("Chép RTSP")
+                                                .font(.caption2)
+                                                .bold()
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.orange)
+                                                .foregroundColor(.white)
+                                                .cornerRadius(6)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                    }
+                                } else {
+                                    Text("🔴 ĐÓNG")
+                                        .font(.caption)
+                                        .bold()
+                                        .foregroundColor(.red)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.red.opacity(0.12))
+                                        .cornerRadius(6)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
                     }
                 }
             }
-            .onAppear {
-                if currentWanIp == "Đang tải..." {
-                    fetchWanIp()
-                }
-                if checkPortHost.isEmpty {
-                    if let dev = activeDevice {
-                        checkPortHost = dev.ip
-                    } else if currentWanIp != "Đang tải..." && currentWanIp != "Không thể lấy IP" {
-                        checkPortHost = currentWanIp
-                    }
+        }
+        .onAppear {
+            if currentWanIp == "Đang tải..." || currentWanIp.isEmpty {
+                fetchWanIp()
+            }
+            if checkPortHost.isEmpty {
+                if let dev = activeDevice {
+                    checkPortHost = dev.ip
+                } else if currentWanIp != "Đang tải..." && currentWanIp != "Không thể lấy IP" {
+                    checkPortHost = currentWanIp
                 }
             }
         }
@@ -1869,574 +1698,179 @@ struct ContentView: View {
         }
     }
 
-    // Modal View: Set Date & NTP
+    // Modal View: Set Date & NTP (Form Style matching Super Password)
     var setDateNtpView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Section 1: Thông tin thiết bị & Xác thực
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("1. KẾT NỐI CAMERA & XÁC THỰC (CREDENTIALS)")
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundColor(Color(hex: "38bdf8"))
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Thiết bị LAN đã quét:")
-                            .font(.caption)
-                            .foregroundColor(Color(hex: "94a3b8"))
-
-                        Menu {
-                            Button("-- Nhập IP thủ công --") {
-                                // keep current ntpTargetIp
-                            }
-                            ForEach(scanner.discoveredDevices) { dev in
-                                Button("\(dev.ip) - \(dev.brand.rawValue) (\(dev.sn.isEmpty ? dev.mac : dev.sn))") {
-                                    ntpTargetIp = dev.ip
-                                    ntpHttpPort = "\(dev.port)"
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text(ntpTargetIp.isEmpty ? (ip.isEmpty ? "-- Chọn thiết bị --" : ip) : ntpTargetIp)
-                                    .font(.subheadline)
-                                    .foregroundColor(.white)
-                                Spacer()
-                                Image(systemName: "chevron.down")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            }
-                            .padding(.horizontal, 12)
-                            .frame(height: 38)
-                            .background(Color(hex: "0f172a"))
-                            .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
+        Form {
+            Section(header: Text("1. Kết Nối Camera & Xác Thực")) {
+                if !scanner.discoveredDevices.isEmpty {
+                    Picker("Thiết bị LAN:", selection: $ntpTargetIp) {
+                        Text("-- Nhập IP thủ công --").tag("")
+                        ForEach(scanner.discoveredDevices) { dev in
+                            Text("\(dev.ip) - \(dev.brand.rawValue)").tag(dev.ip)
                         }
                     }
-
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Địa chỉ IP Camera:")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            TextField("192.168.1.108", text: $ntpTargetIp)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .frame(height: 38)
-                                .background(Color(hex: "0f172a"))
-                                .cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: ntpTargetIp) { val in
+                        if let dev = scanner.discoveredDevices.first(where: { $0.ip == val }) {
+                            ntpHttpPort = "\(dev.port)"
                         }
-                        .frame(maxWidth: .infinity)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Cổng HTTP:")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            TextField("80", text: $ntpHttpPort)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.white)
-                                .keyboardType(.numberPad)
-                                .padding(.horizontal, 10)
-                                .frame(height: 38)
-                                .background(Color(hex: "0f172a"))
-                                .cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                        }
-                        .frame(width: 90)
-                    }
-
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Tài khoản (Username):")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            TextField("admin", text: $ntpUsername)
-                                .font(.system(size: 13))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 10)
-                                .frame(height: 38)
-                                .background(Color(hex: "0f172a"))
-                                .cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                        }
-                        .frame(maxWidth: .infinity)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Mật khẩu Camera:")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            HStack {
-                                if ntpShowPassword {
-                                    TextField("Mật khẩu", text: $ntpPassword)
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white)
-                                } else {
-                                    SecureField("Mật khẩu", text: $ntpPassword)
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white)
-                                }
-                                Button(action: { ntpShowPassword.toggle() }) {
-                                    Image(systemName: ntpShowPassword ? "eye.slash" : "eye")
-                                        .foregroundColor(.gray)
-                                        .font(.system(size: 13))
-                                }
-                            }
-                            .padding(.horizontal, 10)
-                            .frame(height: 38)
-                            .background(Color(hex: "0f172a"))
-                            .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                        }
-                        .frame(maxWidth: .infinity)
                     }
                 }
-                .padding(14)
-                .background(Color(hex: "1e293b"))
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1))
 
-                // Section 2: Đồng bộ giờ iPhone sang camera
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("2. ĐỒNG BỘ THỜI GIAN IPHONE VÀO CAMERA")
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundColor(Color(hex: "38bdf8"))
+                HStack {
+                    Text("Địa chỉ IP")
+                    Spacer()
+                    TextField("192.168.1.108", text: $ntpTargetIp)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numbersAndPunctuation)
+                }
 
-                    HStack {
-                        Text("Giờ iPhone hiện tại:")
-                            .font(.subheadline)
-                            .foregroundColor(Color(hex: "94a3b8"))
-                        Spacer()
-                        Text(ntpCurrentClockStr)
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(Color(hex: "4ade80"))
+                HStack {
+                    Text("Cổng HTTP")
+                    Spacer()
+                    TextField("80", text: $ntpHttpPort)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                HStack {
+                    Text("Tài khoản")
+                    Spacer()
+                    TextField("admin", text: $ntpUsername)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    Text("Mật khẩu")
+                    Spacer()
+                    if ntpShowPassword {
+                        TextField("Mật khẩu", text: $ntpPassword)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Mật khẩu", text: $ntpPassword)
+                            .multilineTextAlignment(.trailing)
                     }
+                    Button(action: { ntpShowPassword.toggle() }) {
+                        Image(systemName: ntpShowPassword ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
+            }
 
-                    Button(action: syncDeviceTimeNow) {
+            Section(header: Text("2. Đồng Bộ Giờ Điện Thoại")) {
+                HStack {
+                    Text("Giờ iPhone:")
+                    Spacer()
+                    Text(ntpCurrentClockStr)
+                        .font(.system(.subheadline, design: .monospaced))
+                        .bold()
+                        .foregroundColor(.green)
+                }
+
+                Button(action: syncDeviceTimeNow) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "bolt.fill")
+                        Text("ĐỒNG BỘ GIỜ VÀO CAMERA")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+            }
+
+            Section(header: Text("3. Cài Đặt Máy Chủ NTP")) {
+                Toggle("Bật tự động đồng bộ NTP", isOn: $enableNtp)
+
+                HStack {
+                    Text("Máy chủ NTP")
+                    Spacer()
+                    TextField("time.google.com", text: $ntpServer)
+                        .multilineTextAlignment(.trailing)
+                    Menu {
+                        Button("Google (time.google.com)") { ntpServer = "time.google.com" }
+                        Button("Windows (time.windows.com)") { ntpServer = "time.windows.com" }
+                        Button("Pool NTP (pool.ntp.org)") { ntpServer = "pool.ntp.org" }
+                        Button("Asia Pool (asia.pool.ntp.org)") { ntpServer = "asia.pool.ntp.org" }
+                        Button("Apple (time.apple.com)") { ntpServer = "time.apple.com" }
+                    } label: {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .foregroundColor(.orange)
+                    }
+                }
+
+                HStack {
+                    Text("Cổng NTP")
+                    Spacer()
+                    TextField("123", text: $ntpPort)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                HStack {
+                    Text("Chu kỳ (Phút)")
+                    Spacer()
+                    TextField("60", text: $ntpPeriod)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                HStack(spacing: 12) {
+                    Button(action: fetchNtpConfig) {
                         HStack {
                             Spacer()
-                            Image(systemName: "bolt.fill")
-                            Text("⚡ Đồng bộ giờ iPhone vào Camera")
+                            Image(systemName: "arrow.down.doc.fill")
+                            Text("Đọc cấu hình")
+                                .font(.footnote)
                                 .bold()
                             Spacer()
                         }
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 8)
                         .background(Color.blue)
                         .foregroundColor(.white)
                         .cornerRadius(8)
                     }
-                }
-                .padding(14)
-                .background(Color(hex: "1e293b"))
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                    .buttonStyle(BorderlessButtonStyle())
 
-                // Section 3: Cấu hình NTP Server
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("3. CÀI ĐẶT MÁY CHỦ NTP (TỰ ĐỘNG)")
-                            .font(.system(size: 11.5, weight: .bold))
-                            .foregroundColor(Color(hex: "f59e0b"))
-                        Spacer()
-                        Toggle("", isOn: $enableNtp)
-                            .labelsHidden()
-                            .toggleStyle(SwitchToggleStyle(tint: .orange))
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
+                    Button(action: saveNtpConfig) {
                         HStack {
-                            Text("Máy chủ NTP (NTP Server):")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
                             Spacer()
-                            Menu("Chọn mẫu...") {
-                                Button("Google (time.google.com)") { ntpServer = "time.google.com" }
-                                Button("Windows (time.windows.com)") { ntpServer = "time.windows.com" }
-                                Button("Pool NTP (pool.ntp.org)") { ntpServer = "pool.ntp.org" }
-                                Button("Asia Pool (asia.pool.ntp.org)") { ntpServer = "asia.pool.ntp.org" }
-                                Button("Apple (time.apple.com)") { ntpServer = "time.apple.com" }
-                            }
-                            .font(.caption)
-                            .foregroundColor(.orange)
+                            Image(systemName: "square.and.arrow.down.fill")
+                            Text("Lưu cài đặt NTP")
+                                .font(.footnote)
+                                .bold()
+                            Spacer()
                         }
-
-                        TextField("time.google.com", text: $ntpServer)
-                            .font(.system(size: 13, design: .monospaced))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .frame(height: 38)
-                            .background(Color(hex: "0f172a"))
-                            .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
+                        .padding(.vertical, 8)
+                        .background(Color.orange)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
                     }
-
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Cổng NTP (Port):")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            TextField("123", text: $ntpPort)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.white)
-                                .keyboardType(.numberPad)
-                                .padding(.horizontal, 10)
-                                .frame(height: 38)
-                                .background(Color(hex: "0f172a"))
-                                .cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                        }
-                        .frame(maxWidth: .infinity)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Chu kỳ cập nhật (Phút):")
-                                .font(.caption)
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            TextField("60", text: $ntpPeriod)
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundColor(.white)
-                                .keyboardType(.numberPad)
-                                .padding(.horizontal, 10)
-                                .frame(height: 38)
-                                .background(Color(hex: "0f172a"))
-                                .cornerRadius(6)
-                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-
-                    HStack(spacing: 10) {
-                        Button(action: fetchNtpConfig) {
-                            HStack {
-                                Image(systemName: "arrow.down.doc.fill")
-                                Text("📥 Đọc từ Camera")
-                                    .font(.subheadline)
-                                    .bold()
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color(hex: "334155"))
-                            .cornerRadius(8)
-                        }
-
-                        Button(action: saveNtpConfig) {
-                            HStack {
-                                Image(systemName: "square.and.arrow.down.fill")
-                                Text("💾 Lưu cài đặt NTP")
-                                    .font(.subheadline)
-                                    .bold()
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(Color.orange)
-                            .cornerRadius(8)
-                        }
-                    }
-                    .padding(.top, 4)
+                    .buttonStyle(BorderlessButtonStyle())
                 }
-                .padding(14)
-                .background(Color(hex: "1e293b"))
-                .cornerRadius(10)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.08), lineWidth: 1))
-
-                // Status Banner
-                if !ntpStatusMessage.isEmpty {
-                    HStack(spacing: 8) {
-                        Image(systemName: ntpStatusSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                            .foregroundColor(ntpStatusSuccess ? Color(hex: "4ade80") : .red)
-                        Text(ntpStatusMessage)
-                            .font(.system(size: 12))
-                            .foregroundColor(ntpStatusSuccess ? Color(hex: "4ade80") : Color(hex: "fca5a5"))
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(hex: "1e293b"))
-                    .cornerRadius(8)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(ntpStatusSuccess ? Color(hex: "4ade80").opacity(0.3) : Color.red.opacity(0.3), lineWidth: 1))
-                }
-            }
-            .padding(16)
-        }
-        .background(Color(hex: "0f172a").edgesIgnoringSafeArea(.all))
-        .onAppear {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            ntpCurrentClockStr = formatter.string(from: Date())
-            if ntpTargetIp.isEmpty {
-                ntpTargetIp = ip.isEmpty ? (activeDevice?.ip ?? "192.168.1.108") : ip
-            }
-            if ntpHttpPort.isEmpty {
-                ntpHttpPort = port.isEmpty ? "80" : port
-            }
-            if ntpUsername.isEmpty {
-                ntpUsername = camUser.isEmpty ? "admin" : camUser
-            }
-            if ntpPassword.isEmpty {
-                ntpPassword = camPass
-            }
-        }
-    }
-
-    // Modal View: Reboot Device
-    var rebootDeviceView: some View {
-        Form {
-            Section(header: Text("Khởi Động Lại Thiết Bị")) {
-                HStack {
-                    Text("Địa chỉ IP Camera")
-                    Spacer()
-                    Text(ip).bold()
-                }
-
-                HStack {
-                    Text("HTTP Port")
-                    Spacer()
-                    TextField("80", text: $port)
-                        .multilineTextAlignment(.trailing)
-                }
-
-                HStack {
-                    Text("User Camera")
-                    Spacer()
-                    TextField("admin", text: $camUser)
-                        .multilineTextAlignment(.trailing)
-                }
-
-                HStack {
-                    Text("Pass Camera")
-                    Spacer()
-                    SecureField("Mật khẩu camera", text: $camPass)
-                        .multilineTextAlignment(.trailing)
-                }
+                .padding(.vertical, 4)
             }
 
-            Section {
-                Button(action: executeReboot) {
+            if !ntpStatusMessage.isEmpty {
+                Section(header: Text("Trạng Thái")) {
                     HStack {
-                        Spacer()
-                        Image(systemName: "arrow.clockwise.circle.fill")
-                        Text("🔄 KHỞI ĐỘNG LẠI CAMERA NGAY")
-                            .bold()
-                        Spacer()
+                        Image(systemName: ntpStatusSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundColor(ntpStatusSuccess ? .green : .red)
+                        Text(ntpStatusMessage)
+                            .font(.footnote)
+                            .foregroundColor(ntpStatusSuccess ? .primary : .red)
                     }
-                    .padding(.vertical, 6)
-                    .background(Color.red)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
                 }
             }
         }
-    }
-
-    // Serial Number Cleaning Helper Function
-    private func cleanSerialNumber(_ input: String) -> String {
-        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let prefixes = ["S/N:", "S/N", "SN:", "SN", "SERIAL:", "SERIAL", "Serial:", "Serial", "sn:", "s/n:"]
-        for prefix in prefixes {
-            if raw.uppercased().hasPrefix(prefix.uppercased()) {
-                raw = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
-            }
+        .onAppear {
+            updateCurrentClock()
         }
-
-        if raw.contains("sn=") || raw.contains("SN=") {
-            let components = raw.components(separatedBy: CharacterSet(charactersIn: "=&?"))
-            for (idx, comp) in components.enumerated() {
-                if comp.lowercased() == "sn" && idx + 1 < components.count {
-                    raw = components[idx + 1]
-                    break
-                }
-            }
-        }
-
-        let cleaned = raw.components(separatedBy: CharacterSet.alphanumerics.inverted).joined().uppercased()
-        return cleaned
-    }
-
-    // Business Logic
-    private func fetchConfig() {
-        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if cleanIp.isEmpty || cleanPort.isEmpty || cleanUser.isEmpty {
-            setStatus("Vui lòng nhập IP, Port và User camera!", type: .error)
-            return
-        }
-
-        isLoading = true
-        setStatus("Đang đọc cấu hình DDNS từ camera...", type: .info)
-
-        cgiClient.fetchDahuaDDNSConfig(ip: cleanIp, port: cleanPort, user: cleanUser, pass: camPass) { result in
-            DispatchQueue.main.async {
-                self.isLoading = false
-                if result.success {
-                    self.rawFetchedConfig = result.rawText
-                    self.appendLog("Cấu hình hiện tại:\n\(result.rawText)")
-                    self.setStatus("Đọc cấu hình từ Camera thành công!", type: .success)
-                    self.parseAndPopulateDDNSConfig(rawText: result.rawText)
-                } else {
-                    let err = "Không thể đọc cấu hình! HTTP: \(result.statusCode) (\(result.errorMessage ?? ""))"
-                    self.appendLog(err)
-                    self.setStatus(err, type: .error)
-                }
-            }
-        }
-    }
-
-    private func parseAndPopulateDDNSConfig(rawText: String) {
-        let lines = rawText.components(separatedBy: CharacterSet.newlines)
-        for line in lines {
-            let parts = line.components(separatedBy: "=")
-            if parts.count >= 2 {
-                let key = parts[0].trimmingCharacters(in: .whitespaces)
-                let val = parts[1].trimmingCharacters(in: .whitespaces)
-
-                if key.contains(".Address") {
-                    self.serverAddr = val
-                } else if key.contains(".HostName") || key.contains(".Domain") {
-                    self.domain = val
-                } else if key.contains(".User") || key.contains(".UserName") {
-                    self.ddnsUser = val
-                } else if key.contains(".Pass") || key.contains(".Password") {
-                    self.ddnsPass = val
-                } else if key.contains(".Enable") {
-                    self.enableDdns = (val.lowercased() == "true" || val == "1")
-                }
-            }
-        }
-    }
-
-    private func executeChangeIp() {
-        setStatus("Đang gửi lệnh thay đổi IP...", type: .info)
-        cgiClient.changeCameraIp(
-            currentIp: ip,
-            newIp: newIp,
-            subnetMask: subnetMask,
-            gateway: gateway,
-            user: camUser,
-            pass: camPass
-        ) { result in
-            DispatchQueue.main.async {
-                if result.success {
-                    self.setStatus("Đã đổi IP thành công thành \(self.newIp)!", type: .success)
-                    self.activeModalType = nil
-                } else {
-                    self.setStatus("Đổi IP thất bại! HTTP \(result.statusCode)", type: .error)
-                }
-            }
-        }
-    }
-
-    private func executeChangePass() {
-        if newPass.isEmpty || newPass != confirmPass {
-            setStatus("Mật khẩu mới không khớp!", type: .error)
-            return
-        }
-        setStatus("Đang cập nhật mật khẩu mới...", type: .info)
-        DispatchQueue.main.async {
-            self.setStatus("Cập nhật mật khẩu mới thành công!", type: .success)
-            self.activeModalType = nil
-        }
-    }
-
-    private func saveConfig() {
-        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanDomain = domain.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if cleanIp.isEmpty || cleanPort.isEmpty || cleanUser.isEmpty || cleanDomain.isEmpty {
-            setStatus("Vui lòng nhập IP, Port, User và Domain!", type: .error)
-            return
-        }
-
-        isLoading = true
-        setStatus("Đang lưu cấu hình DDNS lên camera...", type: .info)
-
-        cgiClient.saveDahuaDDNSConfig(
-            ip: cleanIp,
-            port: cleanPort,
-            user: cleanUser,
-            pass: camPass,
-            channelIdx: selectedChannelIdx,
-            enable: enableDdns,
-            serverAddr: serverAddr.trimmingCharacters(in: .whitespacesAndNewlines),
-            domain: cleanDomain,
-            ddnsUser: ddnsUser.trimmingCharacters(in: .whitespacesAndNewlines),
-            ddnsPass: ddnsPass.trimmingCharacters(in: .whitespacesAndNewlines),
-            existingKeysText: rawFetchedConfig
-        ) { result in
-            DispatchQueue.main.async {
-                self.isLoading = false
-                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
-                    self.appendLog("Phản hồi thành công từ Camera:\n\(result.rawText)")
-                    self.setStatus("CẬP NHẬT CẤU HÌNH FREE DDNS THÀNH CÔNG! 🎉", type: .success)
-                } else if result.success {
-                    self.appendLog("Phản hồi HTTP 200:\n\(result.rawText)")
-                    self.setStatus("Đã gửi lệnh: \(result.rawText.trimmingCharacters(in: .whitespacesAndNewlines))", type: .success)
-                } else {
-                    let err = "Lỗi khi cài đặt DDNS! HTTP: \(result.statusCode) (\(result.errorMessage ?? ""))"
-                    self.appendLog(err)
-                    self.setStatus(err, type: .error)
-                }
-            }
-        }
-    }
-
-    private func executeCheckPorts() {
-        var target = checkPortHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        if target.isEmpty {
-            target = currentWanIp != "Đang tải..." && currentWanIp != "Không thể lấy IP" ? currentWanIp : "192.168.1.108"
-            checkPortHost = target
-        }
-
-        var portsToCheck: [Int] = []
-        for pStr in [cpPort1, cpPort2, cpPort3, cpPort4] {
-            let clean = pStr.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let val = Int(clean), (1...65535).contains(val), !portsToCheck.contains(val) {
-                portsToCheck.append(val)
-            }
-        }
-
-        if portsToCheck.isEmpty {
-            portsToCheck = [37777, 80, 554]
-        }
-
-        isCheckingPorts = true
-        hasCheckedPorts = true
-        portScanResults.removeAll()
-
-        cgiClient.checkPorts(host: target, ports: portsToCheck) { results in
-            DispatchQueue.main.async {
-                self.isCheckingPorts = false
-                self.portScanResults = results
-            }
-        }
-    }
-
-    private func calculateSuperPassword(for date: Date) {
-        let calendar = Calendar.current
-        let year = calendar.component(.year, from: date)
-        let month = calendar.component(.month, from: date)
-        let day = calendar.component(.day, from: date)
-
-        // Formula 1
-        let res1 = (day + month * 100 + year * 10000) * 686572
-        let raw1 = String(res1)
-        let c1 = String(raw1.suffix(6))
-        superPassCode1 = String(repeating: "0", count: max(0, 6 - c1.count)) + c1
-
-        // Formula 2
-        let res2 = (day * month * (year % 2000) * 8888 % 1000000) + 1000000
-        let raw2 = String(res2)
-        let c2 = String(raw2.suffix(6))
-        superPassCode2 = String(repeating: "0", count: max(0, 6 - c2.count)) + c2
-
-        // Formula 3
-        let res3 = (day + month * 100 + year * 10000) * 283848
-        let raw3 = String(res3)
-        let c3 = String(raw3.suffix(6))
-        superPassCode3 = String(repeating: "0", count: max(0, 6 - c3.count)) + c3
     }
 
     private func syncDeviceTimeNow() {
@@ -2616,1083 +2050,449 @@ struct ContentView: View {
 
     // MARK: - Modal View: QR Code Generator (Matching Screenshot 2)
     var qrCodeGeneratorModalView: some View {
-        NavigationView {
-            ZStack {
-                Color(red: 0.05, green: 0.07, blue: 0.12).edgesIgnoringSafeArea(.all)
+        Form {
+            Section(header: Text("1. Chế Độ Tạo QR Code")) {
+                Picker("Chế độ:", selection: $qrMode) {
+                    Text("Theo mẫu thiết bị").tag(0)
+                    Text("Tùy chỉnh (S/N / Văn bản)").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // 1. Chế độ tạo QR Code
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("1. CHẾ ĐỘ TẠO QR CODE")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(Color(red: 0.4, green: 0.75, blue: 1.0))
-
-                            HStack(spacing: 12) {
-                                // Option 1: Theo mẫu thiết bị
-                                Button(action: { qrMode = 0 }) {
-                                    HStack(alignment: .top, spacing: 10) {
-                                        Image(systemName: qrMode == 0 ? "largecircle.fill.circle" : "circle")
-                                            .foregroundColor(qrMode == 0 ? .cyan : .gray)
-                                            .font(.system(size: 18))
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Tạo theo mẫu thiết bị")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundColor(.white)
-                                            Text("Brand, Model, S/N, Safety Code")
-                                                .font(.system(size: 10))
-                                                .foregroundColor(.gray)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(qrMode == 0 ? Color.cyan : Color.gray.opacity(0.3), lineWidth: qrMode == 0 ? 2 : 1)
-                                    )
-                                }
-
-                                // Option 2: Tùy chỉnh
-                                Button(action: { qrMode = 1 }) {
-                                    HStack(alignment: .top, spacing: 10) {
-                                        Image(systemName: qrMode == 1 ? "largecircle.fill.circle" : "circle")
-                                            .foregroundColor(qrMode == 1 ? .cyan : .gray)
-                                            .font(.system(size: 18))
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Tùy chỉnh (Chỉ tạo S/N hoặc Text)")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundColor(.white)
-                                            Text("Nội dung văn bản, Serial, URL bất kỳ")
-                                                .font(.system(size: 10))
-                                                .foregroundColor(.gray)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(qrMode == 1 ? Color.cyan : Color.gray.opacity(0.3), lineWidth: qrMode == 1 ? 2 : 1)
-                                    )
-                                }
-                            }
-
-                            // Quick Fill from LAN Devices
-                            HStack(spacing: 8) {
-                                Image(systemName: "bolt.fill")
-                                    .foregroundColor(.orange)
-                                    .font(.caption)
-
-                                Text("Nạp nhanh từ thiết bị quét được:")
-                                    .font(.caption)
-                                    .foregroundColor(Color(red: 0.8, green: 0.85, blue: 0.95))
-
-                                Menu {
-                                    Button("-- [Chọn thiết bị để tự động điền Model & S/N] --") {
-                                        selectedLanDeviceForQr = ""
-                                    }
-                                    ForEach(scanner.discoveredDevices) { dev in
-                                        Button("\(dev.ip) - \(dev.brand.rawValue) (\(dev.sn.isEmpty ? dev.mac : dev.sn))") {
-                                            selectedLanDeviceForQr = dev.sn
-                                            qrBrand = dev.brand.rawValue
-                                            if !dev.model.isEmpty { qrModel = dev.model }
-                                            if !dev.sn.isEmpty { qrSn = dev.sn }
-                                        }
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text(selectedLanDeviceForQr.isEmpty ? "-- [Chọn thiết bị để tự động điền Model & S/N] --" : selectedLanDeviceForQr)
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-                                            .lineLimit(1)
-                                        Spacer()
-                                        Image(systemName: "chevron.down")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                    .cornerRadius(6)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1)
-                                    )
-                                }
-                            }
-                            .padding(.top, 4)
+                if !scanner.discoveredDevices.isEmpty {
+                    Picker("Nạp nhanh từ thiết bị LAN:", selection: $selectedLanDeviceForQr) {
+                        Text("-- Chọn thiết bị đã quét --").tag("")
+                        ForEach(scanner.discoveredDevices) { dev in
+                            Text("\(dev.ip) - \(dev.brand.rawValue) (\(dev.sn.isEmpty ? dev.mac : dev.sn))").tag(dev.sn.isEmpty ? dev.ip : dev.sn)
                         }
-                        .padding(14)
-                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
-                        )
-
-                        // 2. Thông tin thiết bị Camera / Đầu Ghi
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("2. THÔNG TIN THIẾT BỊ CAMERA / ĐẦU GHI")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(Color(red: 0.4, green: 0.75, blue: 1.0))
-
-                            if qrMode == 0 {
-                                // Row 1: Brand & Model
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Thương hiệu (Brand):")
-                                            .font(.caption)
-                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-
-                                        Menu {
-                                            ForEach(["Imou", "Dahua", "KBVision", "Hikvision", "UNV", "Tiandy", "Khác"], id: \.self) { b in
-                                                Button(b) { qrBrand = b }
-                                            }
-                                        } label: {
-                                            HStack {
-                                                Text(qrBrand)
-                                                    .font(.subheadline)
-                                                    .bold()
-                                                    .foregroundColor(.white)
-                                                Spacer()
-                                                Image(systemName: "chevron.down")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.gray)
-                                            }
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 10)
-                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Tên thiết bị / Model:")
-                                            .font(.caption)
-                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-
-                                        TextField("IPC-A22EP", text: $qrModel)
-                                            .font(.subheadline)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 9)
-                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-
-                                // Row 2: Serial Number & Safety Code
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        HStack {
-                                            Text("*")
-                                                .foregroundColor(.cyan)
-                                            Text("Số Serial (S/N):")
-                                                .font(.caption)
-                                                .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-                                        }
-
-                                        TextField("Nhập Serial Number thiết bị...", text: $qrSn)
-                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .autocapitalization(.allCharacters)
-                                            .disableAutocorrection(true)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 9)
-                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Safety Code (Mã an toàn đáy cam):")
-                                            .font(.caption)
-                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-
-                                        TextField("VD: L2A8B3 (nếu có)", text: $qrSafetyCode)
-                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .autocapitalization(.allCharacters)
-                                            .disableAutocorrection(true)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 9)
-                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-
-                                // Encoding Format Selection (Radio Buttons)
-                                HStack(spacing: 20) {
-                                    Button(action: { qrEncodingFormat = 0 }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: qrEncodingFormat == 0 ? "largecircle.fill.circle" : "circle")
-                                                .foregroundColor(qrEncodingFormat == 0 ? .cyan : .gray)
-                                                .font(.caption)
-                                            Text("Mã hóa S/N chuẩn (Quét trực tiếp gán vào App Imou/DMSS/KBONE)")
-                                                .font(.caption2)
-                                                .foregroundColor(qrEncodingFormat == 0 ? .white : .gray)
-                                        }
-                                    }
-
-                                    Button(action: { qrEncodingFormat = 1 }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: qrEncodingFormat == 1 ? "largecircle.fill.circle" : "circle")
-                                                .foregroundColor(qrEncodingFormat == 1 ? .cyan : .gray)
-                                                .font(.caption)
-                                            Text("Mã hóa Cặp {S/N, Safety Code}")
-                                                .font(.caption2)
-                                                .foregroundColor(qrEncodingFormat == 1 ? .white : .gray)
-                                        }
-                                    }
-                                }
-                                .padding(.top, 4)
-
-                            } else {
-                                // Custom Text Mode
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("* Nội dung S/N hoặc Văn bản / URL:")
-                                        .font(.caption)
-                                        .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
-
-                                    TextField("Nhập chuỗi S/N hoặc URL / văn bản bất kỳ...", text: $qrCustomText)
-                                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 10)
-                                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                                        .cornerRadius(6)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
-                                }
-                            }
-
-                            // Generate Button
-                            HStack {
-                                Spacer()
-                                Button(action: generateQrPayloadAndImage) {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "qrcode")
-                                            .font(.headline)
-                                        Text("Tạo QRCode")
-                                            .font(.headline)
-                                            .bold()
-                                    }
-                                    .padding(.horizontal, 28)
-                                    .padding(.vertical, 12)
-                                    .background(Color(red: 0.01, green: 0.52, blue: 0.78))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
-                                    .shadow(color: Color(red: 0.01, green: 0.52, blue: 0.78).opacity(0.4), radius: 6, x: 0, y: 3)
-                                }
-                                Spacer()
-                            }
-                            .padding(.top, 6)
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: selectedLanDeviceForQr) { val in
+                        if let dev = scanner.discoveredDevices.first(where: { (dev.sn.isEmpty ? dev.ip : dev.sn) == val }) {
+                            qrBrand = dev.brand.rawValue
+                            if !dev.model.isEmpty { qrModel = dev.model }
+                            if !dev.sn.isEmpty { qrSn = dev.sn }
                         }
-                        .padding(14)
-                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
-                        )
+                    }
+                }
+            }
 
-                        // 3. Generated QR Result Card
-                        if isQrGenerated, let qrImg = generatedQrImage {
-                            VStack(spacing: 14) {
-                                // White card container for QR Image
-                                Image(uiImage: qrImg)
-                                    .resizable()
-                                    .interpolation(.none)
-                                    .scaledToFit()
-                                    .frame(width: 220, height: 220)
-                                    .padding(12)
-                                    .background(Color.white)
-                                    .cornerRadius(12)
-                                    .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 4)
-
-                                // Information details
-                                VStack(spacing: 6) {
-                                    if qrMode == 0 {
-                                        HStack {
-                                            Text("Thương hiệu:")
-                                                .font(.caption)
-                                                .foregroundColor(.gray)
-                                            Text(qrBrand)
-                                                .font(.caption)
-                                                .bold()
-                                                .foregroundColor(.cyan)
-
-                                            if !qrModel.isEmpty {
-                                                Text("| Model:")
-                                                    .font(.caption)
-                                                    .foregroundColor(.gray)
-                                                Text(qrModel)
-                                                    .font(.caption)
-                                                    .bold()
-                                                    .foregroundColor(.white)
-                                            }
-                                        }
-
-                                        HStack {
-                                            Text("S/N: \(qrSn)")
-                                                .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                                .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-
-                                            if !qrSafetyCode.isEmpty {
-                                                Text("• SC: \(qrSafetyCode)")
-                                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                                    .foregroundColor(.orange)
-                                            }
-                                        }
-                                    } else {
-                                        Text("Nội dung: \(generatedQrPayload)")
-                                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                            .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
-                                    }
-
-                                    HStack {
-                                        Text("Mã hóa chuỗi:")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                        Text(generatedQrPayload)
-                                            .font(.system(size: 11, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Color.white.opacity(0.08))
-                                            .cornerRadius(4)
-                                    }
-                                }
-
-                                // Action Buttons
-                                HStack(spacing: 12) {
-                                    Button(action: {
-                                        UIPasteboard.general.string = generatedQrPayload
-                                        qrCopiedToast = true
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                            qrCopiedToast = false
-                                        }
-                                    }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: qrCopiedToast ? "checkmark" : "doc.on.doc")
-                                            Text(qrCopiedToast ? "Đã sao chép!" : "Sao chép chuỗi")
-                                                .font(.caption)
-                                                .bold()
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(qrCopiedToast ? Color.green : Color.orange.opacity(0.2))
-                                        .foregroundColor(qrCopiedToast ? .white : .orange)
-                                        .cornerRadius(6)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.4), lineWidth: 1))
-                                    }
-
-                                    Button(action: { showShareSheet = true }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: "square.and.arrow.up")
-                                            Text("Chia sẻ / Lưu ảnh")
-                                                .font(.caption)
-                                                .bold()
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(Color.blue)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(6)
-                                    }
-                                }
-                            }
-                            .padding(16)
-                            .frame(maxWidth: .infinity)
-                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
-                            )
+            if qrMode == 0 {
+                Section(header: Text("2. Thông Tin Thiết Bị")) {
+                    Picker("Thương hiệu (Brand):", selection: $qrBrand) {
+                        ForEach(["Imou", "Dahua", "KBVision", "Hikvision", "UNV", "Tiandy", "Khác"], id: \.self) { b in
+                            Text(b).tag(b)
                         }
+                    }
+                    .pickerStyle(MenuPickerStyle())
 
-                        // Bottom Close Button
+                    HStack {
+                        Text("Model:")
+                        Spacer()
+                        TextField("IPC-A22EP", text: $qrModel)
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    HStack {
+                        Text("Số Serial (S/N):")
+                        Spacer()
+                        TextField("Nhập Serial Number...", text: $qrSn)
+                            .multilineTextAlignment(.trailing)
+                            .autocapitalization(.allCharacters)
+                            .disableAutocorrection(true)
+                    }
+
+                    HStack {
+                        Text("Safety Code (Mã an toàn):")
+                        Spacer()
+                        TextField("VD: L2A8B3 (nếu có)", text: $qrSafetyCode)
+                            .multilineTextAlignment(.trailing)
+                            .autocapitalization(.allCharacters)
+                            .disableAutocorrection(true)
+                    }
+
+                    Picker("Định dạng mã hóa:", selection: $qrEncodingFormat) {
+                        Text("S/N chuẩn (Imou/DMSS)").tag(0)
+                        Text("Cặp {S/N, Safety Code}").tag(1)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                }
+            } else {
+                Section(header: Text("2. Nội Dung Tùy Chỉnh")) {
+                    HStack {
+                        Text("Nội dung:")
+                        Spacer()
+                        TextField("Nhập Serial / URL / Văn bản...", text: $qrCustomText)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+
+            Section {
+                Button(action: generateQrPayloadAndImage) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "qrcode")
+                        Text("TẠO MÃ QR CODE")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+            }
+
+            if isQrGenerated, let qrImg = generatedQrImage {
+                Section(header: Text("3. Mã QR Code Đã Tạo")) {
+                    VStack(spacing: 12) {
                         HStack {
                             Spacer()
-                            Button(action: { activeModalType = nil }) {
-                                Text("Đóng")
+                            Image(uiImage: qrImg)
+                                .resizable()
+                                .interpolation(.none)
+                                .scaledToFit()
+                                .frame(width: 200, height: 200)
+                                .padding(10)
+                                .background(Color.white)
+                                .cornerRadius(12)
+                                .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 2)
+                            Spacer()
+                        }
+
+                        if qrMode == 0 {
+                            VStack(spacing: 4) {
+                                Text("\(qrBrand) \(qrModel.isEmpty ? "" : "- " + qrModel)")
                                     .font(.subheadline)
                                     .bold()
-                                    .padding(.horizontal, 24)
-                                    .padding(.vertical, 8)
-                                    .background(Color(red: 0.12, green: 0.16, blue: 0.24))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
-                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                                Text("S/N: \(qrSn)")
+                                    .font(.system(.subheadline, design: .monospaced))
+                                    .bold()
+                                    .foregroundColor(.orange)
+                                if !qrSafetyCode.isEmpty {
+                                    Text("Safety Code: \(qrSafetyCode)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
+                        } else {
+                            Text(qrCustomText)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
                         }
-                        .padding(.top, 4)
+
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                UIPasteboard.general.string = generatedQrPayload
+                                qrCopiedToast = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    qrCopiedToast = false
+                                }
+                            }) {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: qrCopiedToast ? "checkmark" : "doc.on.doc")
+                                    Text(qrCopiedToast ? "Đã chép!" : "Sao chép chuỗi")
+                                        .font(.footnote)
+                                        .bold()
+                                    Spacer()
+                                }
+                                .padding(.vertical, 8)
+                                .background(qrCopiedToast ? Color.green : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+
+                            Button(action: { showShareSheet = true }) {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "square.and.arrow.up")
+                                    Text("Chia sẻ / Lưu ảnh")
+                                        .font(.footnote)
+                                        .bold()
+                                    Spacer()
+                                }
+                                .padding(.vertical, 8)
+                                .background(Color.orange)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                        }
                     }
-                    .padding()
+                    .padding(.vertical, 6)
                 }
             }
-            .navigationBarTitle("Tạo Mã QR Code Cài Đặt Cho Camera / Đầu Ghi", displayMode: .inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(action: { activeModalType = nil }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
-                    }
-                }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let img = generatedQrImage {
+                ActivityView(activityItems: [img, generatedQrPayload])
             }
-            .sheet(isPresented: $showShareSheet) {
-                if let img = generatedQrImage {
-                    ActivityView(activityItems: [img, generatedQrPayload])
-                }
-            }
-            .onAppear {
-                if !qrSn.isEmpty && generatedQrImage == nil {
-                    generateQrPayloadAndImage()
-                }
+        }
+        .onAppear {
+            if !qrSn.isEmpty && generatedQrImage == nil {
+                generateQrPayloadAndImage()
             }
         }
     }
 
     // MARK: - RTSP & ONVIF Generator Modal View
     var rtspOnvifModalView: some View {
-        ZStack {
-            Color(hex: "0f172a").edgesIgnoringSafeArea(.all)
-
-            VStack(spacing: 0) {
-                // Header
-                HStack(spacing: 8) {
-                    Image(systemName: "video.badge.waveform")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(Color(hex: "f59e0b"))
-
-                    Text("Tạo Link RTSP & Onvif")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-
-                    Text("(ONVIF RTSP Generator & Extractor)")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(hex: "94a3b8"))
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Button(action: { activeModalType = nil }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(Color(hex: "94a3b8"))
-                            .padding(6)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Circle())
+        Form {
+            Section(header: Text("1. Chọn Thiết Bị Quét Được Hoặc Nhập IP")) {
+                if !scanner.discoveredDevices.isEmpty {
+                    Picker("Thiết bị từ LAN:", selection: $rtspSelectedLanDevice) {
+                        Text("-- Nhập IP thủ công --").tag("")
+                        ForEach(scanner.discoveredDevices) { dev in
+                            Text("\(dev.ip) - \(dev.brand.rawValue)").tag(dev.ip)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: rtspSelectedLanDevice) { val in
+                        if !val.isEmpty {
+                            rtspTargetIp = val
+                            if let dev = scanner.discoveredDevices.first(where: { $0.ip == val }) {
+                                applyDetectedBrand(dev)
+                            }
+                        }
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Color(hex: "1e293b"))
-                .overlay(Rectangle().frame(height: 1).foregroundColor(Color.white.opacity(0.08)), alignment: .bottom)
 
-                // Scrollable Body
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        // 1. CHỌN THIẾT BỊ QUÉT ĐƯỢC HOẶC TỰ NHẬP IP / TÊN MIỀN
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("1. CHỌN THIẾT BỊ QUÉT ĐƯỢC HOẶC TỰ NHẬP IP / TÊN MIỀN")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(Color(hex: "38bdf8"))
+                HStack {
+                    Text("Địa chỉ IP / Domain:")
+                    Spacer()
+                    TextField("192.168.1.108 hoặc domain.ddns", text: $rtspTargetIp)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numbersAndPunctuation)
+                }
+            }
 
-                            VStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Danh sách thiết bị đã quét")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(Color(hex: "94a3b8"))
+            Section(header: Text("2. Lựa Chọn Giao Thức")) {
+                Picker("Giao thức:", selection: $rtspProtocolMode) {
+                    Text("RTSP theo Hãng").tag(0)
+                    Text("Trích xuất ONVIF").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+            }
 
-                                    Menu {
-                                        Button("-- [Tự do nhập IP] hoặc Chọn thiết bị --") {
-                                            rtspSelectedLanDevice = ""
-                                        }
-                                        ForEach(scanner.discoveredDevices) { dev in
-                                            Button("\(dev.ip) - \(dev.brand.rawValue) (\(dev.sn.isEmpty ? dev.mac : dev.sn))") {
-                                                rtspSelectedLanDevice = "\(dev.ip) - \(dev.brand.rawValue)"
-                                                rtspTargetIp = dev.ip
-                                                applyDetectedBrand(dev)
-                                            }
-                                        }
-                                    } label: {
-                                        HStack {
-                                            Text(rtspSelectedLanDevice.isEmpty ? "-- [Tự do nhập IP] hoặc Chọn thiết bị --" : rtspSelectedLanDevice)
-                                                .font(.system(size: 12.5))
-                                                .foregroundColor(.white)
-                                                .lineLimit(1)
-                                            Spacer()
-                                            Image(systemName: "chevron.down")
-                                                .font(.caption2)
-                                                .foregroundColor(.gray)
-                                        }
-                                        .padding(.horizontal, 12)
-                                        .frame(height: 38)
-                                        .background(Color(hex: "0f172a"))
-                                        .cornerRadius(6)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                }
+            if rtspProtocolMode == 0 {
+                Section(header: Text("3. Thông Số Cấu Hình RTSP")) {
+                    Picker("Thương hiệu / Hãng:", selection: $rtspBrand) {
+                        Text("Dahua / KBONE / Imou").tag("dahua")
+                        Text("Hikvision / Hilook / EZVIZ").tag("hikvision")
+                        Text("Uniview (UNV)").tag("uniview")
+                        Text("Axis").tag("axis")
+                        Text("Samsung / Hanwha").tag("samsung")
+                        Text("Yoosee / Siepem").tag("yoosee")
+                        Text("Chuẩn chung (Generic RTSP)").tag("generic")
+                    }
+                    .pickerStyle(MenuPickerStyle())
 
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Địa chỉ IP / Tên miền (WAN hoặc LAN)")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(Color(hex: "94a3b8"))
+                    Picker("Loại thiết bị:", selection: $rtspDeviceType) {
+                        Text("Camera (IPC)").tag("ipc")
+                        Text("Đầu ghi (NVR/XVR)").tag("nvr")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
 
-                                    TextField("VD: 192.168.1.108 hoặc domain.ddns.net", text: $rtspTargetIp)
-                                        .font(.system(size: 13, design: .monospaced))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 12)
-                                        .frame(height: 38)
-                                        .background(Color(hex: "0f172a"))
-                                        .cornerRadius(6)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                }
-                            }
-                        }
-                        .padding(14)
-                        .background(Color.white.opacity(0.02))
-                        .cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                    HStack {
+                        Text("Cổng RTSP:")
+                        Spacer()
+                        TextField("554", text: $rtspPort)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.numberPad)
+                    }
 
-                        // 2. LỰA CHỌN GIAO THỨC (PROTOCOL)
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("2. LỰA CHỌN GIAO THỨC (PROTOCOL)")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(Color(hex: "f59e0b"))
+                    HStack {
+                        Text("Số lượng kênh:")
+                        Spacer()
+                        TextField("1", text: $rtspChannelCount)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.numberPad)
+                    }
 
-                            HStack(spacing: 10) {
-                                // Option 1: Link RTSP theo Hãng
-                                Button(action: { rtspProtocolMode = 0 }) {
-                                    HStack(alignment: .top, spacing: 10) {
-                                        Image(systemName: rtspProtocolMode == 0 ? "largecircle.fill.circle" : "circle")
-                                            .foregroundColor(rtspProtocolMode == 0 ? Color(hex: "f59e0b") : .gray)
-                                            .font(.system(size: 16))
-                                            .padding(.top, 2)
+                    Picker("Luồng Stream:", selection: $rtspStreamMode) {
+                        Text("Cả 2 luồng (Main & Sub)").tag("both")
+                        Text("Chỉ Main").tag("main")
+                        Text("Chỉ Sub").tag("sub")
+                    }
+                    .pickerStyle(MenuPickerStyle())
 
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Link RTSP theo Hãng")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundColor(Color(hex: "f59e0b"))
-                                            Text("Dahua, Hikvision, KBONE, Imou, Uniview, Yoosee...")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(Color(hex: "94a3b8"))
-                                                .multilineTextAlignment(.leading)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(rtspProtocolMode == 0 ? Color(hex: "f59e0b").opacity(0.08) : Color.white.opacity(0.02))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(rtspProtocolMode == 0 ? Color(hex: "f59e0b") : Color.white.opacity(0.12), lineWidth: rtspProtocolMode == 0 ? 2 : 1)
-                                    )
-                                }
-                                .buttonStyle(PlainButtonStyle())
+                    HStack {
+                        Text("Tài khoản:")
+                        Spacer()
+                        TextField("admin", text: $rtspUsername)
+                            .multilineTextAlignment(.trailing)
+                    }
 
-                                // Option 2: Link & Trích xuất ONVIF
-                                Button(action: { rtspProtocolMode = 1 }) {
-                                    HStack(alignment: .top, spacing: 10) {
-                                        Image(systemName: rtspProtocolMode == 1 ? "largecircle.fill.circle" : "circle")
-                                            .foregroundColor(rtspProtocolMode == 1 ? Color(hex: "38bdf8") : .gray)
-                                            .font(.system(size: 16))
-                                            .padding(.top, 2)
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text("Link & Trích xuất ONVIF")
-                                                .font(.system(size: 13, weight: .bold))
-                                                .foregroundColor(Color(hex: "38bdf8"))
-                                            Text("Chuẩn ONVIF toàn cầu & Query SOAP trực tiếp từ Camera")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(Color(hex: "94a3b8"))
-                                                .multilineTextAlignment(.leading)
-                                        }
-                                    }
-                                    .padding(12)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(rtspProtocolMode == 1 ? Color(hex: "38bdf8").opacity(0.08) : Color.white.opacity(0.02))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(rtspProtocolMode == 1 ? Color(hex: "38bdf8") : Color.white.opacity(0.12), lineWidth: rtspProtocolMode == 1 ? 2 : 1)
-                                    )
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
-                        }
-
-                        // 3A. THÔNG SỐ CẤU HÌNH RTSP (Khi chọn RTSP)
-                        if rtspProtocolMode == 0 {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("3. THÔNG SỐ CẤU HÌNH RTSP")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(Color(hex: "f59e0b"))
-
-                                // Hãng, Loại thiết bị, Cổng RTSP
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Thương hiệu / Hãng")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        Menu {
-                                            Button("Dahua / Kbvision / KBONE / Imou") { rtspBrand = "dahua" }
-                                            Button("Hikvision / Hilook") { rtspBrand = "hikvision" }
-                                            Button("Uniview") { rtspBrand = "uniview" }
-                                            Button("Axis") { rtspBrand = "axis"; rtspDeviceType = "ipc" }
-                                            Button("Samsung / Hanwha") { rtspBrand = "samsung" }
-                                            Button("Yoosee / Siepem") { rtspBrand = "yoosee"; rtspDeviceType = "ipc" }
-                                            Button("Chuẩn chung (Generic RTSP)") { rtspBrand = "generic" }
-                                        } label: {
-                                            HStack {
-                                                Text(brandDisplayName(rtspBrand))
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                                    .lineLimit(1)
-                                                Spacer()
-                                                Image(systemName: "chevron.down")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.gray)
-                                            }
-                                            .padding(.horizontal, 8)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Loại thiết bị")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        Menu {
-                                            Button("Camera (IPC)") { rtspDeviceType = "ipc" }
-                                            Button("Đầu ghi (NVR/XVR)") { rtspDeviceType = "nvr" }
-                                        } label: {
-                                            HStack {
-                                                Text(rtspDeviceType == "ipc" ? "Camera (IPC)" : "Đầu ghi (NVR/XVR)")
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                                Spacer()
-                                                Image(systemName: "chevron.down")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.gray)
-                                            }
-                                            .padding(.horizontal, 8)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                        }
-                                    }
-                                    .frame(width: 120)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Cổng RTSP")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        TextField("554", text: $rtspPort)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .keyboardType(.numberPad)
-                                            .padding(.horizontal, 8)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(width: 80)
-                                }
-
-                                // Kênh, Luồng Stream
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Số lượng kênh (Channel count)")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        TextField("1", text: $rtspChannelCount)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .keyboardType(.numberPad)
-                                            .padding(.horizontal, 10)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Luồng Stream")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        Menu {
-                                            Button("Cả luồng chính & luồng phụ (Main & Sub)") { rtspStreamMode = "both" }
-                                            Button("Chỉ luồng chính (Main Stream)") { rtspStreamMode = "main" }
-                                            Button("Chỉ luồng phụ (Sub Stream)") { rtspStreamMode = "sub" }
-                                        } label: {
-                                            HStack {
-                                                Text(streamModeDisplayName(rtspStreamMode))
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                                    .lineLimit(1)
-                                                Spacer()
-                                                Image(systemName: "chevron.down")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.gray)
-                                            }
-                                            .padding(.horizontal, 8)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-
-                                // Tài khoản, Mật khẩu
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Tài khoản (Username)")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        TextField("admin", text: $rtspUsername)
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 10)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Mật khẩu (Password)")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        HStack {
-                                            if rtspShowPassword {
-                                                TextField("Mật khẩu", text: $rtspPassword)
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                            } else {
-                                                SecureField("Mật khẩu", text: $rtspPassword)
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                            }
-                                            Button(action: { rtspShowPassword.toggle() }) {
-                                                Image(systemName: rtspShowPassword ? "eye.slash" : "eye")
-                                                    .foregroundColor(.gray)
-                                                    .font(.system(size: 13))
-                                            }
-                                        }
-                                        .padding(.horizontal, 10)
-                                        .frame(height: 38)
-                                        .background(Color(hex: "0f172a"))
-                                        .cornerRadius(6)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-
-                                // Checkboxes
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Button(action: { rtspIncludeAuth.toggle() }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: rtspIncludeAuth ? "checkmark.square.fill" : "square")
-                                                .foregroundColor(rtspIncludeAuth ? Color(hex: "f59e0b") : .gray)
-                                            Text("Bao gồm User & Password trong URL (rtsp://user:pass@ip:port/...)")
-                                                .font(.system(size: 11.5))
-                                                .foregroundColor(Color(hex: "cbd5e1"))
-                                        }
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-
-                                    Button(action: { rtspDahuaUnicast.toggle() }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: rtspDahuaUnicast ? "checkmark.square.fill" : "square")
-                                                .foregroundColor(rtspDahuaUnicast ? Color(hex: "f59e0b") : .gray)
-                                            Text("Tự động thêm tham số &unicast=true&proto=Onvif cho Camera Dahua/Imou")
-                                                .font(.system(size: 11.5))
-                                                .foregroundColor(Color(hex: "cbd5e1"))
-                                        }
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                                .padding(.top, 4)
-                            }
-                            .padding(14)
-                            .background(Color.white.opacity(0.02))
-                            .cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                    HStack {
+                        Text("Mật khẩu:")
+                        Spacer()
+                        if rtspShowPassword {
+                            TextField("Mật khẩu", text: $rtspPassword)
+                                .multilineTextAlignment(.trailing)
                         } else {
-                            // 3B. THÔNG SỐ CẤU HÌNH ONVIF (Khi chọn ONVIF)
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("3. THÔNG SỐ CẤU HÌNH ONVIF")
-                                    .font(.system(size: 11, weight: .bold))
-                                    .foregroundColor(Color(hex: "38bdf8"))
-
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Cổng ONVIF (HTTP / SOAP)")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        TextField("80", text: $onvifHttpPort)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .keyboardType(.numberPad)
-                                            .padding(.horizontal, 10)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Cổng RTSP Media")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        TextField("554", text: $onvifRtspPort)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundColor(.white)
-                                            .keyboardType(.numberPad)
-                                            .padding(.horizontal, 10)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Tài khoản ONVIF")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        TextField("admin", text: $onvifUsername)
-                                            .font(.system(size: 12))
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 10)
-                                            .frame(height: 38)
-                                            .background(Color(hex: "0f172a"))
-                                            .cornerRadius(6)
-                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Mật khẩu ONVIF")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(Color(hex: "94a3b8"))
-                                        HStack {
-                                            if onvifShowPassword {
-                                                TextField("Mật khẩu", text: $onvifPassword)
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                            } else {
-                                                SecureField("Mật khẩu", text: $onvifPassword)
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.white)
-                                            }
-                                            Button(action: { onvifShowPassword.toggle() }) {
-                                                Image(systemName: onvifShowPassword ? "eye.slash" : "eye")
-                                                    .foregroundColor(.gray)
-                                                    .font(.system(size: 13))
-                                            }
-                                        }
-                                        .padding(.horizontal, 10)
-                                        .frame(height: 38)
-                                        .background(Color(hex: "0f172a"))
-                                        .cornerRadius(6)
-                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-                            }
-                            .padding(14)
-                            .background(Color.white.opacity(0.02))
-                            .cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
+                            SecureField("Mật khẩu", text: $rtspPassword)
+                                .multilineTextAlignment(.trailing)
                         }
+                        Button(action: { rtspShowPassword.toggle() }) {
+                            Image(systemName: rtspShowPassword ? "eye.slash" : "eye")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                    }
 
-                        // 4. NÚT TẠO LINK RTSP
+                    Toggle("Chèn User:Pass vào URL", isOn: $rtspIncludeAuth)
+
+                    if rtspBrand == "dahua" {
+                        Toggle("Thêm tham số Unicast (&unicast=true)", isOn: $rtspDahuaUnicast)
+                    }
+                }
+            } else {
+                Section(header: Text("3. Thông Số Cấu Hình ONVIF")) {
+                    HStack {
+                        Text("Cổng HTTP (SOAP):")
+                        Spacer()
+                        TextField("80", text: $onvifHttpPort)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.numberPad)
+                    }
+
+                    HStack {
+                        Text("Cổng RTSP Media:")
+                        Spacer()
+                        TextField("554", text: $onvifRtspPort)
+                            .multilineTextAlignment(.trailing)
+                            .keyboardType(.numberPad)
+                    }
+
+                    HStack {
+                        Text("Tài khoản:")
+                        Spacer()
+                        TextField("admin", text: $onvifUsername)
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    HStack {
+                        Text("Mật khẩu:")
+                        Spacer()
+                        if onvifShowPassword {
+                            TextField("Mật khẩu", text: $onvifPassword)
+                                .multilineTextAlignment(.trailing)
+                        } else {
+                            SecureField("Mật khẩu", text: $onvifPassword)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        Button(action: { onvifShowPassword.toggle() }) {
+                            Image(systemName: onvifShowPassword ? "eye.slash" : "eye")
+                                .foregroundColor(.gray)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                    }
+
+                    Toggle("Gửi truy vấn SOAP trực tiếp từ Camera", isOn: $onvifLiveQuery)
+                }
+            }
+
+            Section {
+                Button(action: {
+                    if rtspProtocolMode == 0 {
+                        generateRtspLinks()
+                    } else {
+                        generateOnvifLinks()
+                    }
+                }) {
+                    HStack {
+                        Spacer()
+                        if isExtractingOnvif {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .padding(.trailing, 6)
+                            Text("ĐANG TRÍCH XUẤT...")
+                                .bold()
+                        } else {
+                            Image(systemName: "play.fill")
+                            Text(rtspProtocolMode == 0 ? "TẠO LINK RTSP" : "TẠO & TRÍCH XUẤT ONVIF")
+                                .bold()
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
+                }
+                .disabled(isExtractingOnvif)
+                .buttonStyle(BorderlessButtonStyle())
+            }
+
+            if !rtspResultText.isEmpty {
+                Section(header: Text("4. Kết Quả Link RTSP / ONVIF")) {
+                    HStack {
+                        Text("Đã tạo \(rtspStreamRows.count) link")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
                         Button(action: {
-                            if rtspProtocolMode == 0 {
-                                generateRtspLinks()
-                            } else {
-                                generateOnvifLinks()
+                            UIPasteboard.general.string = rtspResultText
+                            rtspCopiedToast = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                rtspCopiedToast = false
                             }
                         }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "play.fill")
-                                    .font(.system(size: 13))
-                                Text(rtspProtocolMode == 0 ? "Tạo Link RTSP" : "Tạo & Trích xuất Link ONVIF")
-                                    .font(.system(size: 14, weight: .bold))
+                            HStack(spacing: 4) {
+                                Image(systemName: rtspCopiedToast ? "checkmark" : "doc.on.doc")
+                                Text(rtspCopiedToast ? "Đã chép!" : "Sao chép tất cả")
                             }
+                            .font(.caption)
+                            .bold()
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(rtspCopiedToast ? Color.green : Color.orange)
                             .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color(hex: "f59e0b"), Color(hex: "d97706")]),
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .cornerRadius(8)
-                            .shadow(color: Color(hex: "f59e0b").opacity(0.4), radius: 8, x: 0, y: 4)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(BorderlessButtonStyle())
+                    }
+
+                    ForEach(rtspStreamRows) { row in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(row.name)
+                                    .font(.caption)
+                                    .bold()
+                                    .foregroundColor(.orange)
+                                Spacer()
+                                Button(action: {
+                                    UIPasteboard.general.string = row.url
+                                    rtspCopiedToast = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        rtspCopiedToast = false
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "doc.on.doc")
+                                        Text("Chép")
+                                    }
+                                    .font(.caption2)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.orange.opacity(0.15))
+                                    .foregroundColor(.orange)
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(BorderlessButtonStyle())
+                            }
+                            Text(row.url)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.primary)
+                                .lineLimit(2)
                         }
                         .padding(.vertical, 4)
-
-                        // 5. KẾT QUẢ LINK RTSP / ONVIF
-                        if !rtspResultText.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(Color(hex: "34d399"))
-                                            .font(.system(size: 14))
-                                        Text("Kết quả Link RTSP / ONVIF:")
-                                            .font(.system(size: 12.5, weight: .bold))
-                                            .foregroundColor(Color(hex: "34d399"))
-                                    }
-                                    Spacer()
-                                    Button(action: {
-                                        UIPasteboard.general.string = rtspResultText
-                                        rtspCopiedToast = true
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                            rtspCopiedToast = false
-                                        }
-                                    }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: rtspCopiedToast ? "checkmark" : "doc.on.doc")
-                                            Text(rtspCopiedToast ? "Đã chép!" : "Sao chép tất cả")
-                                        }
-                                        .font(.system(size: 11, weight: .semibold))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 5)
-                                        .background(Color(hex: "10b981"))
-                                        .cornerRadius(6)
-                                    }
-                                }
-
-                                Text(rtspResultText)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(Color(hex: "4ade80"))
-                                    .padding(10)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .background(Color(hex: "090d16"))
-                                    .cornerRadius(6)
-                                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12), lineWidth: 1))
-
-                                // Bảng chi tiết từng luồng
-                                if !rtspStreamRows.isEmpty {
-                                    VStack(spacing: 6) {
-                                        ForEach(rtspStreamRows) { row in
-                                            HStack(spacing: 8) {
-                                                Text(row.name)
-                                                    .font(.system(size: 10.5, weight: .bold))
-                                                    .foregroundColor(Color(hex: "38bdf8"))
-                                                    .frame(width: 90, alignment: .leading)
-
-                                                Text(row.url)
-                                                    .font(.system(size: 10, design: .monospaced))
-                                                    .foregroundColor(.white.opacity(0.9))
-                                                    .lineLimit(1)
-                                                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                                                Button(action: {
-                                                    UIPasteboard.general.string = row.url
-                                                    rtspCopiedToast = true
-                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                                        rtspCopiedToast = false
-                                                    }
-                                                }) {
-                                                    Image(systemName: "doc.on.doc")
-                                                        .font(.system(size: 11))
-                                                        .foregroundColor(Color(hex: "38bdf8"))
-                                                        .padding(5)
-                                                        .background(Color.white.opacity(0.08))
-                                                        .cornerRadius(5)
-                                                }
-                                            }
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 6)
-                                            .background(Color(hex: "1e293b").opacity(0.6))
-                                            .cornerRadius(6)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(12)
-                            .background(Color.black.opacity(0.25))
-                            .cornerRadius(8)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
-                        }
-
-                        // 6. Mẹo kiểm tra & Hướng dẫn
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("💡 Mẹo kiểm tra & Hướng dẫn:")
-                                .font(.system(size: 11.5, weight: .bold))
-                                .foregroundColor(.white)
-                            Text("• Kiểm tra bằng VLC Media Player: Mở VLC ➔ Media ➔ Open Network Stream (Ctrl + N) ➔ dán link RTSP vừa tạo để xem trực tiếp video.")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            Text("• Camera Dahua / Imou: Camera IP cần thêm đuôi &unicast=true&proto=Onvif. Với đầu ghi (NVR/XVR), chỉ cần subtype=0 (chính) hoặc subtype=1 (phụ).")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            Text("• Camera Hikvision: NVR sử dụng /Streaming/Channels/101, Camera IPC sử dụng /Streaming/Unicast/channels/101.")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color(hex: "94a3b8"))
-                            Text("• Camera Yoosee / Siepem: Cổng RTSP thường là 554 hoặc 5554, đường dẫn /onvif1 (HD) hoặc /onvif2 (SD).")
-                                .font(.system(size: 11))
-                                .foregroundColor(Color(hex: "94a3b8"))
-                        }
-                        .padding(12)
-                        .background(Color(hex: "0f172a").opacity(0.6))
-                        .cornerRadius(8)
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
                     }
-                    .padding(16)
                 }
-
-                // Footer
-                HStack {
-                    Spacer()
-                    Button("Đóng") {
-                        activeModalType = nil
-                    }
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(Color(hex: "334155"))
-                    .cornerRadius(6)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color(hex: "1e293b"))
-                .overlay(Rectangle().frame(height: 1).foregroundColor(Color.white.opacity(0.08)), alignment: .top)
             }
         }
         .onAppear {
