@@ -1,0 +1,41 @@
+name: Build Dahua Free DDNS iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.4'
+
+      - name: Build iOS App with Xcode
+        run: |
+          xcodebuild -project DahuaFreeDDNSiOS.xcodeproj \
+                     -scheme DahuaFreeDDNSiOS \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -derivedDataPath build \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO
+
+      - name: Create Payload directory & Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/DahuaFreeDDNS.app Payload/
+          zip -r DahuaFreeDDNS-Real.ipa Payload
+
+      - name: Upload Compiled IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DahuaFreeDDNS-Real-IPA
+          path: DahuaFreeDDNS-Real.ipa
