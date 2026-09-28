@@ -201,47 +201,51 @@ struct ContentView: View {
                 } else {
                     ForEach(0..<scanner.discoveredDevices.count, id: \.self) { idx in
                         let dev = scanner.discoveredDevices[idx]
-                        HStack {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack {
-                                        Text(dev.brand.rawValue)
-                                            .font(.caption)
-                                            .bold()
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(badgeColor(for: dev.brand))
-                                            .foregroundColor(.white)
-                                            .cornerRadius(6)
+                        HStack(alignment: .top, spacing: 12) {
+                            if dev.brand == .dahua || dev.brand == .imou {
+                                CameraLogoIcon(brand: dev.brand)
+                            }
 
-                                        Text("\(dev.ip):\(dev.port)")
-                                            .font(.headline)
-                                    }
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack {
+                                    Text(dev.brand.rawValue)
+                                        .font(.caption)
+                                        .bold()
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(badgeColor(for: dev.brand))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(6)
 
-                                    if !dev.sn.isEmpty {
-                                        Text("🔵 S/N: \(dev.sn)")
-                                            .font(.caption)
-                                            .bold()
-                                            .foregroundColor(.blue)
-                                    }
-
-                                    if !dev.model.isEmpty {
-                                        Text("⚙️ Model: \(dev.model)")
-                                            .font(.caption)
-                                            .foregroundColor(.primary)
-                                    }
-
-                                    if !dev.mac.isEmpty {
-                                        Text("📶 MAC: \(dev.mac)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-
-                                    if !dev.extraInfo.isEmpty {
-                                        Text("Giao thức: \(dev.extraInfo)")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                    }
+                                    Text("\(dev.ip):\(dev.port)")
+                                        .font(.headline)
                                 }
+
+                                if !dev.sn.isEmpty {
+                                    Text("🔵 S/N: \(dev.sn)")
+                                        .font(.caption)
+                                        .bold()
+                                        .foregroundColor(.blue)
+                                }
+
+                                if !dev.model.isEmpty {
+                                    Text("⚙️ Model: \(dev.model)")
+                                        .font(.caption)
+                                        .foregroundColor(.primary)
+                                }
+
+                                if !dev.mac.isEmpty {
+                                    Text("📶 MAC: \(dev.mac)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                if !dev.extraInfo.isEmpty {
+                                    Text("Giao thức: \(dev.extraInfo)")
+                                        .font(.caption2)
+                                        .foregroundColor(.gray)
+                                }
+                            }
 
                             Spacer()
 
@@ -650,5 +654,32 @@ struct ContentView: View {
     private func appendLog(_ msg: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         self.logHistory += "[\(timestamp)] \(msg)\n"
+    }
+}
+
+struct CameraLogoIcon: View {
+    let brand: CameraBrand
+
+    var body: some View {
+        if let path = Bundle.main.path(forResource: "camera_logo", ofType: "png"),
+           let uiImage = UIImage(contentsOfFile: path) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .cornerRadius(8)
+                .shadow(color: Color.black.opacity(0.15), radius: 3, x: 0, y: 2)
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(brand == .dahua ? Color.red : Color.orange)
+                    .frame(width: 44, height: 44)
+                VStack(spacing: 0) {
+                    Text(brand == .dahua ? "DAHUA" : "IMOU")
+                        .font(.system(size: 9, weight: .black, design: .rounded))
+                        .foregroundColor(.white)
+                }
+            }
+        }
     }
 }
