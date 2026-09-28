@@ -15,24 +15,6 @@ let freeDdnsPresets: [DdnsPreset] = [
     DdnsPreset(name: "Tùy chỉnh (Custom)", server: "")
 ]
 
-struct CameraProductItem: Identifiable {
-    let id = UUID()
-    let name: String
-    let brand: String
-    let desc: String
-    let iconName: String
-    let isImou: Bool
-}
-
-let sampleProducts: [CameraProductItem] = [
-    CameraProductItem(name: "Imou Ranger 2 (IPC-A22EP)", brand: "Imou", desc: "Camera Wi-Fi quay quét 360°, AI phát hiện người, Smart Tracking 1080P/2K", iconName: "video.fill", isImou: true),
-    CameraProductItem(name: "Imou Cruiser (IPC-S22FP)", brand: "Imou", desc: "Camera ngoài trời xoay 360°, có màu ban đêm Full Color, còi báo động", iconName: "video.circle.fill", isImou: true),
-    CameraProductItem(name: "Imou Rex (IPC-A32EP)", brand: "Imou", desc: "Camera cao cấp dạng quả cầu, ẩn ống kính riêng tư, đàm thoại 2 chiều", iconName: "video.square.fill", isImou: true),
-    CameraProductItem(name: "Dahua IPC-HFW1230S", brand: "Dahua", desc: "Camera Thân hồng ngoại 30m, IP67 chống nước ngoài trời, H.265+", iconName: "video.badge.plus", isImou: false),
-    CameraProductItem(name: "Dahua IPC-HDW1230T-S4", brand: "Dahua", desc: "Camera Eyeball bán cầu góc rộng, vỏ kim loại chắc chắn, PoE", iconName: "video.fill.badge.plus", isImou: false),
-    CameraProductItem(name: "Dahua NVR4104HS-4KS2", brand: "Dahua", desc: "Đầu ghi hình IP NVR 4 kênh chuẩn 4K, băng thông 80Mbps, Free DDNS", iconName: "server.rack", isImou: false)
-]
-
 struct ContentView: View {
     @StateObject private var scanner = LanScanner()
     @State private var selectedTab = 0
@@ -95,129 +77,89 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            // TAB 0: Trang chủ
-            NavigationView {
-                scanView
-                    .navigationTitle("Trang chủ")
-            }
-            .tabItem {
-                Image(systemName: "house.fill")
-                Text("Trang chủ")
-            }
-            .tag(0)
+        NavigationView {
+            VStack(spacing: 0) {
+                Picker("Chức năng", selection: $selectedTab) {
+                    Text("Quét IP LAN").tag(0)
+                    Text("Set DDNS Thủ Công").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding()
 
-            // TAB 1: Sản phẩm
-            NavigationView {
-                productsView
-                    .navigationTitle("Sản phẩm")
-            }
-            .tabItem {
-                Image(systemName: "video.fill")
-                Text("Sản phẩm")
-            }
-            .tag(1)
-
-            // TAB 2: Quét LAN (Nút Giữa)
-            NavigationView {
-                quickScanCenterView
-                    .navigationTitle("Quét LAN Camera")
-            }
-            .tabItem {
-                Image(systemName: "viewfinder.circle.fill")
-                Text("Quét LAN")
-            }
-            .tag(2)
-
-            // TAB 3: Dễ Cấu Hình
-            NavigationView {
-                ddnsFormView
-                    .navigationTitle("Dễ Cấu Hình")
-            }
-            .tabItem {
-                Image(systemName: "bag.fill")
-                Text("Dễ Cấu Hình")
-            }
-            .tag(3)
-
-            // TAB 4: Tôi
-            NavigationView {
-                profileView
-                    .navigationTitle("Tôi")
-            }
-            .tabItem {
-                Image(systemName: "person.fill")
-                Text("Tôi")
-            }
-            .tag(4)
-        }
-        .accentColor(.orange)
-        .actionSheet(isPresented: $showActionSheet) {
-            ActionSheet(
-                title: Text("Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
-                message: Text("Hãng: \(activeDevice?.brand.rawValue ?? "Camera")"),
-                buttons: [
-                    .default(Text("⚙️ Cài Đặt Free DDNS")) {
-                        if let dev = activeDevice {
-                            self.ip = dev.ip
-                            self.port = "\(dev.port)"
-                            self.activeModalType = .setDdns
-                        }
-                    },
-                    .default(Text("🌐 Đổi địa chỉ IP")) {
-                        if let dev = activeDevice {
-                            self.ip = dev.ip
-                            self.newIp = dev.ip
-                            self.activeModalType = .changeIp
-                        }
-                    },
-                    .default(Text("🔑 Đổi mật khẩu Camera")) {
-                        if let dev = activeDevice {
-                            self.ip = dev.ip
-                            self.activeModalType = .changePass
-                        }
-                    },
-                    .cancel(Text("Hủy"))
-                ]
-            )
-        }
-        .sheet(item: $activeModalType) { type in
-            switch type {
-            case .setDdns:
-                NavigationView {
+                if selectedTab == 0 {
+                    scanView
+                } else {
                     ddnsFormView
-                        .navigationTitle("Set Free DDNS (\(ip))")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Đóng") { activeModalType = nil }
-                            }
-                        }
                 }
-            case .changeIp:
-                NavigationView {
-                    changeIpView
-                        .navigationTitle("Đổi IP Camera (\(ip))")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Đóng") { activeModalType = nil }
+            }
+            .navigationTitle("Dahua & Imou Manager")
+            .actionSheet(isPresented: $showActionSheet) {
+                ActionSheet(
+                    title: Text("Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
+                    message: Text("Hãng: \(activeDevice?.brand.rawValue ?? "Camera")"),
+                    buttons: [
+                        .default(Text("⚙️ Cài Đặt Free DDNS")) {
+                            if let dev = activeDevice {
+                                self.ip = dev.ip
+                                self.port = "\(dev.port)"
+                                self.activeModalType = .setDdns
                             }
-                        }
-                }
-            case .changePass:
-                NavigationView {
-                    changePassView
-                        .navigationTitle("Đổi Mật Khẩu (\(ip))")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Đóng") { activeModalType = nil }
+                        },
+                        .default(Text("🌐 Đổi địa chỉ IP")) {
+                            if let dev = activeDevice {
+                                self.ip = dev.ip
+                                self.newIp = dev.ip
+                                self.activeModalType = .changeIp
                             }
-                        }
+                        },
+                        .default(Text("🔑 Đổi mật khẩu Camera")) {
+                            if let dev = activeDevice {
+                                self.ip = dev.ip
+                                self.activeModalType = .changePass
+                            }
+                        },
+                        .cancel(Text("Hủy"))
+                    ]
+                )
+            }
+            .sheet(item: $activeModalType) { type in
+                switch type {
+                case .setDdns:
+                    NavigationView {
+                        ddnsFormView
+                            .navigationTitle("Set Free DDNS (\(ip))")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Đóng") { activeModalType = nil }
+                                }
+                            }
+                    }
+                case .changeIp:
+                    NavigationView {
+                        changeIpView
+                            .navigationTitle("Đổi IP Camera (\(ip))")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Đóng") { activeModalType = nil }
+                                }
+                            }
+                    }
+                case .changePass:
+                    NavigationView {
+                        changePassView
+                            .navigationTitle("Đổi Mật Khẩu (\(ip))")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Đóng") { activeModalType = nil }
+                                }
+                            }
+                    }
                 }
             }
         }
     }
 
-    // TAB 0: Scan LAN View
+    // TAB 1: Scan LAN View
     var scanView: some View {
         List {
             Section {
@@ -312,109 +254,7 @@ struct ContentView: View {
         .listStyle(GroupedListStyle())
     }
 
-    // TAB 1: Products View
-    var productsView: some View {
-        List {
-            Section(header: Text("Thiết bị Camera Dahua & Imou Nổi Bật")) {
-                ForEach(sampleProducts) { prod in
-                    HStack(spacing: 12) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill((prod.isImou ? Color.orange : Color.red).opacity(0.15))
-                                .frame(width: 50, height: 50)
-                            Image(systemName: prod.iconName)
-                                .font(.title2)
-                                .foregroundColor(prod.isImou ? .orange : .red)
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(prod.name)
-                                    .font(.headline)
-                                Spacer()
-                                Text(prod.brand)
-                                    .font(.caption2)
-                                    .bold()
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(prod.isImou ? Color.orange : Color.red)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(4)
-                            }
-
-                            Text(prod.desc)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
-            }
-        }
-        .listStyle(GroupedListStyle())
-    }
-
-    // TAB 2: Quick Scan Center View
-    var quickScanCenterView: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(Color.orange.opacity(0.15))
-                    .frame(width: 140, height: 140)
-
-                Circle()
-                    .fill(Color.orange.opacity(0.3))
-                    .frame(width: 110, height: 110)
-
-                Button(action: {
-                    scanner.startScan()
-                    selectedTab = 0
-                }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 84, height: 84)
-                        Image(systemName: "viewfinder")
-                            .font(.system(size: 40, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-
-            VStack(spacing: 8) {
-                Text("Quét Mạng LAN Camera")
-                    .font(.title2)
-                    .bold()
-
-                Text("Tự động tìm kiếm tất cả Camera Dahua, Imou & IP Camera trong mạng Wi-Fi LAN")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
-
-            Button(action: {
-                scanner.startScan()
-                selectedTab = 0
-            }) {
-                Text("🔍 BẮT ĐẦU QUÉT TỰ ĐỘNG")
-                    .bold()
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.orange)
-                    .cornerRadius(12)
-                    .padding(.horizontal, 32)
-            }
-
-            Spacer()
-        }
-    }
-
-    // TAB 3: DDNS Form View
+    // TAB 2: Set Free DDNS Form View
     var ddnsFormView: some View {
         Form {
             Section(header: Text("Thông tin Camera Dahua / Imou")) {
@@ -515,7 +355,7 @@ struct ContentView: View {
                         Spacer()
                     }
                     .padding(.vertical, 6)
-                    .background(Color.orange)
+                    .background(Color.blue)
                     .cornerRadius(8)
                 }
                 .disabled(isLoading)
@@ -539,72 +379,13 @@ struct ContentView: View {
                         .font(.footnote)
                 }
             }
-        }
-    }
 
-    // TAB 4: Profile View
-    var profileView: some View {
-        List {
-            Section {
-                HStack(spacing: 16) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 54))
-                        .foregroundColor(.orange)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Kỹ thuật viên Camera")
-                            .font(.headline)
-                        Text("Dahua & Imou Manager User")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text("Phiên bản: v1.0.0 (Free DDNS)")
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                }
-                .padding(.vertical, 8)
-            }
-
-            Section(header: Text("Nhật ký hệ thống (System Logs)")) {
-                ScrollView {
-                    Text(logHistory)
-                        .font(.caption2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(Color.black.opacity(0.05))
-                        .cornerRadius(8)
-                }
-                .frame(height: 180)
-
-                Button(action: {
-                    self.logHistory = "Ứng dụng Dahua & Imou Manager đã xóa nhật ký.\n"
-                }) {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "trash")
-                        Text("Xóa Nhật Ký Log")
-                        Spacer()
-                    }
-                    .foregroundColor(.red)
-                }
-            }
-
-            Section(header: Text("Thông tin phần mềm")) {
-                HStack {
-                    Text("Hỗ trợ thiết bị")
-                    Spacer()
-                    Text("Dahua, Imou, IP Camera")
-                        .foregroundColor(.secondary)
-                }
-                HStack {
-                    Text("Giao thức hỗ trợ")
-                    Spacer()
-                    Text("DHDiscover / CGI / Digest Auth")
-                        .foregroundColor(.secondary)
-                }
+            Section(header: Text("Nhật ký (Log Output)")) {
+                Text(logHistory)
+                    .font(.caption2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .listStyle(GroupedListStyle())
     }
 
     // Modal view: Change IP
