@@ -29,10 +29,7 @@ jobs:
                  -framework UIKit \
                  -framework AVFoundation \
                  -framework CoreImage \
-                 DahuaFreeDDNSiOS/ContentView.swift \
-                 DahuaFreeDDNSiOS/DahuaCgiClient.swift \
-                 DahuaFreeDDNSiOS/LanScanner.swift \
-                 DahuaFreeDDNSiOS/DahuaFreeDDNSApp.swift \
+                 DahuaFreeDDNSiOS/*.swift \
                  -o DahuaFreeDDNS 2>&1 | tee compile.log
 
           echo "### Swift Compilation Log" >> $GITHUB_STEP_SUMMARY
