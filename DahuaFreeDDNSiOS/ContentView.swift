@@ -3064,49 +3064,6 @@ struct ContentView: View {
             }
         }
     }
-}
-
-// MARK: - Super Password Row Component
-struct SuperPassRow: View {
-    let title: String
-    let code: String
-    @State private var copied: Bool = false
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Text(code)
-                    .font(.system(size: 24, weight: .bold, design: .monospaced))
-                    .foregroundColor(.orange)
-            }
-            Spacer()
-            Button(action: {
-                UIPasteboard.general.string = code
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    copied = false
-                }
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    Text(copied ? "Đã chép!" : "Sao chép")
-                        .font(.caption)
-                        .bold()
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(copied ? Color.green : Color.orange)
-                .foregroundColor(.white)
-                .cornerRadius(6)
-            }
-        }
-        .padding(10)
-        .background(Color(UIColor.tertiarySystemBackground))
-        .cornerRadius(8)
-    }
 
     // MARK: - RTSP & ONVIF Generator Modal View
     var rtspOnvifModalView: some View {
@@ -3910,6 +3867,49 @@ struct SuperPassRow: View {
         } else {
             rtspBrand = "dahua"
         }
+    }
+}
+
+// MARK: - Super Password Row Component
+struct SuperPassRow: View {
+    let title: String
+    let code: String
+    @State private var copied: Bool = false
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Text(code)
+                    .font(.system(size: 24, weight: .bold, design: .monospaced))
+                    .foregroundColor(.orange)
+            }
+            Spacer()
+            Button(action: {
+                UIPasteboard.general.string = code
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    copied = false
+                }
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    Text(copied ? "Đã chép!" : "Sao chép")
+                        .font(.caption)
+                        .bold()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(copied ? Color.green : Color.orange)
+                .foregroundColor(.white)
+                .cornerRadius(6)
+            }
+        }
+        .padding(10)
+        .background(Color(UIColor.tertiarySystemBackground))
+        .cornerRadius(8)
     }
 }
 
