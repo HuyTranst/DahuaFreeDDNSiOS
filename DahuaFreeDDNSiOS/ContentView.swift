@@ -16,27 +16,46 @@ let freeDdnsPresets: [DdnsPreset] = [
 ]
 
 struct ContentView: View {
-    @State private var ip: String = "192.168.1.108"
-    @State private var port: String = "80"
-    @State private var camUser: String = "admin"
-    @State private var camPass: String = ""
-    
-    @State private var selectedPresetIndex: Int = 0
-    @State private var serverAddr: String = "fastddns.net"
-    @State private var domain: String = "mycam.fastddns.net"
-    @State private var ddnsUser: String = ""
-    @State private var ddnsPass: String = ""
-    @State private var enableDdns: Bool = true
-    @State private var selectedChannelIdx: String = "0"
-    @State private var availableChannels: [(name: String, idx: String)] = [("Kênh mặc định [0]", "0")]
+    @StateObject private var scanner = LanScanner()
+    @State private var selectedTab = 0
 
+    // Selected Device for Action Modal
+    @State private var activeDevice: CameraDevice? = nil
+    @State private var showActionSheet = false
+    @State private var activeModalType: ModalType? = nil
+
+    // Set DDNS State
+    @State var ip: String = "192.168.1.108"
+    @State var port: String = "80"
+    @State var camUser: String = "admin"
+    @State var camPass: String = ""
+    @State var selectedPresetIndex: Int = 0
+    @State var serverAddr: String = "fastddns.net"
+    @State var domain: String = "mycam.fastddns.net"
+    @State var ddnsUser: String = ""
+    @State var ddnsPass: String = ""
+    @State var enableDdns: Bool = true
+    @State var selectedChannelIdx: String = "0"
+
+    // Change IP State
+    @State private var newIp: String = "192.168.1.120"
+    @State private var subnetMask: String = "255.255.255.0"
+    @State private var gateway: String = "192.168.1.1"
+
+    // Change Password State
+    @State private var oldPass: String = ""
+    @State private var newPass: String = ""
+    @State private var confirmPass: String = ""
+
+    // UI Status
     @State private var isLoading: Bool = false
-    @State private var statusMessage: String = "Sẵn sàng kết nối tới đầu ghi Dahua."
+    @State private var statusMessage: String = "Sẵn sàng kết nối tới camera Dahua/Imou."
     @State private var statusType: StatusType = .info
-    @State private var logHistory: String = "Ứng dụng Dahua Free DDNS iOS đã sẵn sàng.\n"
+    @State private var logHistory: String = "Ứng dụng Dahua & Imou DDNS iOS đã sẵn sàng.\n"
     @State private var rawFetchedConfig: String = ""
 
     private let cgiClient = DahuaCgiClient()
+    private let configManager = CameraConfigManager()
 
     enum StatusType {
         case info, success, error
@@ -50,144 +69,410 @@ struct ContentView: View {
         }
     }
 
+    enum ModalType: Identifiable {
+        case setDdns
+        case changeIp
+        case changePass
+
+        var id: Int { hashValue }
+    }
+
     var body: some View {
         NavigationView {
-            Form {
-                // Section 1: Thông tin kết nối Camera / Đầu ghi
-                Section(header: Text("Thông tin Camera / Đầu ghi Dahua").font(.headline)) {
-                    HStack {
-                        Image(systemName: "network")
-                            .foregroundColor(.blue)
-                        TextField("Địa chỉ IP (VD: 192.168.1.108)", text: $ip)
-                            .keyboardType(.decimalPad)
-                            .autocapitalization(.none)
-                    }
-                    
-                    HStack {
-                        Image(systemName: "number")
-                            .foregroundColor(.blue)
-                        TextField("Cổng HTTP (VD: 80)", text: $port)
-                            .keyboardType(.numberPad)
-                    }
-
-                    HStack {
-                        Image(systemName: "person.fill")
-                            .foregroundColor(.blue)
-                        TextField("Tài khoản Camera (admin)", text: $camUser)
-                            .autocapitalization(.none)
-                    }
-
-                    HStack {
-                        Image(systemName: "lock.fill")
-                            .foregroundColor(.blue)
-                        SecureField("Mật khẩu Camera", text: $camPass)
-                    }
+            VStack(spacing: 0) {
+                Picker("Chức năng", selection: $selectedTab) {
+                    Text("Quét IP LAN").tag(0)
+                    Text("Set DDNS Thủ Công").tag(1)
                 }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding()
 
-                // Section 2: Cấu hình Free DDNS
-                Section(header: Text("Cấu hình Free DDNS").font(.headline)) {
-                    Picker("Chọn nhà cung cấp DDNS", selection: $selectedPresetIndex) {
-                        ForEach(0..<freeDdnsPresets.count, id: \.self) { index in
-                            Text(freeDdnsPresets[index].name).tag(index)
-                        }
-                    }
-                    .onChange(of: selectedPresetIndex) { newIndex in
-                        let preset = freeDdnsPresets[newIndex]
-                        if !preset.server.isEmpty {
-                            serverAddr = preset.server
-                        }
-                    }
-
-                    HStack {
-                        Image(systemName: "server.rack")
-                            .foregroundColor(.orange)
-                        TextField("Máy chủ DDNS (Server)", text: $serverAddr)
-                            .autocapitalization(.none)
-                    }
-
-                    HStack {
-                        Image(systemName: "link")
-                            .foregroundColor(.orange)
-                        TextField("Tên miền (Domain)", text: $domain)
-                            .autocapitalization(.none)
-                    }
-
-                    HStack {
-                        Image(systemName: "person.badge.key")
-                            .foregroundColor(.orange)
-                        TextField("DDNS Username (Nếu có)", text: $ddnsUser)
-                            .autocapitalization(.none)
-                    }
-
-                    HStack {
-                        Image(systemName: "key.fill")
-                            .foregroundColor(.orange)
-                        SecureField("DDNS Password (Nếu có)", text: $ddnsPass)
-                    }
-
-                    Toggle(isOn: $enableDdns) {
-                        HStack {
-                            Image(systemName: "power")
-                                .foregroundColor(enableDdns ? .green : .gray)
-                            Text("Kích hoạt DDNS (Enable)")
-                        }
-                    }
-                }
-
-                // Section 3: Thao tác & Hành động
-                Section {
-                    Button(action: saveConfig) {
-                        HStack {
-                            Spacer()
-                            if isLoading {
-                                ProgressView()
-                                    .padding(.trailing, 5)
-                            } else {
-                                Image(systemName: "checkmark.circle.fill")
-                            }
-                            Text("CÀI ĐẶT FREE DDNS")
-                                .bold()
-                            Spacer()
-                        }
-                        .foregroundColor(.white)
-                        .padding(.vertical, 8)
-                        .background(isLoading ? Color.gray : Color.blue)
-                        .cornerRadius(8)
-                    }
-                    .disabled(isLoading)
-
-                    Button(action: fetchConfig) {
-                        HStack {
-                            Spacer()
-                            Image(systemName: "arrow.clockwise")
-                            Text("Đọc cấu hình từ Camera")
-                            Spacer()
-                        }
-                    }
-                    .disabled(isLoading)
-                }
-
-                // Section 4: Trạng thái & Nhật ký
-                Section(header: Text("Trạng thái & Nhật ký hoạt động").font(.headline)) {
-                    HStack {
-                        Circle()
-                            .fill(statusType.color)
-                            .frame(width: 10, height: 10)
-                        Text(statusMessage)
-                            .font(.subheadline)
-                            .foregroundColor(statusType.color)
-                    }
-
-                    ScrollView {
-                        Text(logHistory)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundColor(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 120)
+                if selectedTab == 0 {
+                    scanView
+                } else {
+                    ddnsFormView
                 }
             }
-            .navigationTitle("Dahua Free DDNS")
+            .navigationTitle("Dahua & Imou Manager")
+            .actionSheet(isPresented: $showActionSheet) {
+                ActionSheet(
+                    title: Text("Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
+                    message: Text("Loại thiết bị: \(activeDevice?.brand.rawValue ?? "Camera")"),
+                    buttons: [
+                        .default(Text("⚙️ Cài Đặt Free DDNS")) {
+                            if let dev = activeDevice {
+                                self.ip = dev.ip
+                                self.port = "\(dev.port)"
+                                self.activeModalType = .setDdns
+                            }
+                        },
+                        .default(Text("🌐 Đổi địa chỉ IP")) {
+                            if let dev = activeDevice {
+                                self.ip = dev.ip
+                                self.newIp = dev.ip
+                                self.activeModalType = .changeIp
+                            }
+                        },
+                        .default(Text("🔑 Đổi mật khẩu Camera")) {
+                            if let dev = activeDevice {
+                                self.ip = dev.ip
+                                self.activeModalType = .changePass
+                            }
+                        },
+                        .cancel(Text("Hủy"))
+                    ]
+                )
+            }
+            .sheet(item: $activeModalType) { type in
+                switch type {
+                case .setDdns:
+                    NavigationView {
+                        ddnsFormView
+                            .navigationTitle("Set Free DDNS (\(ip))")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Đóng") { activeModalType = nil }
+                                }
+                            }
+                    }
+                case .changeIp:
+                    NavigationView {
+                        changeIpView
+                            .navigationTitle("Đổi IP Camera (\(ip))")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Đóng") { activeModalType = nil }
+                                }
+                            }
+                    }
+                case .changePass:
+                    NavigationView {
+                        changePassView
+                            .navigationTitle("Đổi Mật Khẩu (\(ip))")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Đóng") { activeModalType = nil }
+                                }
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    // TAB 1: Scan LAN View
+    var scanView: some View {
+        List {
+            Section {
+                Button(action: { scanner.startScan() }) {
+                    HStack {
+                        Spacer()
+                        if scanner.isScanning {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        } else {
+                            Image(systemName: "line.horizontal.3.decrease.circle.fill")
+                        }
+                        Text(scanner.isScanning ? "ĐANG QUÉT MẠNG LAN..." : "BẮT ĐẦU QUÉT IP CAMERA")
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .foregroundColor(.white)
+                    .background(scanner.isScanning ? Color.gray : Color.blue)
+                    .cornerRadius(10)
+                }
+                .disabled(scanner.isScanning)
+
+                if scanner.isScanning {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: scanner.progress)
+                        Text(scanner.statusMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Section(header: Text("Danh sách thiết bị quét được (\(scanner.discoveredDevices.count))")) {
+                if scanner.discoveredDevices.isEmpty && !scanner.isScanning {
+                    Text("Chưa tìm thấy camera nào. Nhấn Bắt đầu quét để tìm thiết bị trong LAN.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 8)
+                } else {
+                    ForEach(scanner.discoveredDevices) { dev in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(dev.brand.rawValue)
+                                        .font(.caption)
+                                        .bold()
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(badgeColor(for: dev.brand))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(6)
+
+                                    Text(dev.ip)
+                                        .font(.headline)
+                                }
+
+                                if !dev.extraInfo.isEmpty {
+                                    Text("Cổng: \(dev.port) | \(dev.extraInfo)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            Spacer()
+
+                            // Display Gear/Settings icon ONLY for Dahua and Imou
+                            if dev.brand.isConfigurable {
+                                Button(action: {
+                                    self.activeDevice = dev
+                                    self.showActionSheet = true
+                                }) {
+                                    Image(systemName: "gearshape.fill")
+                                        .font(.title2)
+                                        .foregroundColor(.blue)
+                                        .padding(8)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+        }
+        .listStyle(GroupedListStyle())
+    }
+
+    // TAB 2: DDNS Form View
+    var ddnsFormView: some View {
+        Form {
+            Section(header: Text("Thông tin Camera / Đầu ghi Dahua & Imou")) {
+                HStack {
+                    Image(systemName: "network").foregroundColor(.blue)
+                    TextField("Địa chỉ IP (192.168.1.108)", text: $ip)
+                }
+                HStack {
+                    Image(systemName: "number").foregroundColor(.blue)
+                    TextField("Cổng HTTP (80)", text: $port)
+                }
+                HStack {
+                    Image(systemName: "person.fill").foregroundColor(.blue)
+                    TextField("Tài khoản Camera (admin)", text: $camUser)
+                }
+                HStack {
+                    Image(systemName: "lock.fill").foregroundColor(.blue)
+                    SecureField("Mật khẩu Camera", text: $camPass)
+                }
+            }
+
+            Section(header: Text("Cấu hình Free DDNS")) {
+                Picker("Nhà cung cấp DDNS", selection: $selectedPresetIndex) {
+                    ForEach(0..<freeDdnsPresets.count, id: \.self) { i in
+                        Text(freeDdnsPresets[i].name).tag(i)
+                    }
+                }
+                .onChange(of: selectedPresetIndex) { i in
+                    if !freeDdnsPresets[i].server.isEmpty {
+                        serverAddr = freeDdnsPresets[i].server
+                    }
+                }
+
+                HStack {
+                    Image(systemName: "server.rack").foregroundColor(.orange)
+                    TextField("Máy chủ DDNS", text: $serverAddr)
+                }
+                HStack {
+                    Image(systemName: "link").foregroundColor(.orange)
+                    TextField("Tên miền (Domain)", text: $domain)
+                }
+                HStack {
+                    Image(systemName: "person.badge.key").foregroundColor(.orange)
+                    TextField("DDNS Username (Nếu có)", text: $ddnsUser)
+                }
+                HStack {
+                    Image(systemName: "key.fill").foregroundColor(.orange)
+                    SecureField("DDNS Password (Nếu có)", text: $ddnsPass)
+                }
+                Toggle("Kích hoạt DDNS", isOn: $enableDdns)
+            }
+
+            Section {
+                Button(action: saveConfig) {
+                    HStack {
+                        Spacer()
+                        if isLoading { ProgressView().padding(.trailing, 4) }
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("CÀI ĐẶT FREE DDNS").bold()
+                        Spacer()
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 8)
+                    .background(isLoading ? Color.gray : Color.blue)
+                    .cornerRadius(8)
+                }
+                .disabled(isLoading)
+
+                Button(action: fetchConfig) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "arrow.clockwise")
+                        Text("Đọc cấu hình từ Camera")
+                        Spacer()
+                    }
+                }
+                .disabled(isLoading)
+            }
+
+            Section(header: Text("Trạng thái & Log")) {
+                HStack {
+                    Circle().fill(statusType.color).frame(width: 10, height: 10)
+                    Text(statusMessage).font(.subheadline).foregroundColor(statusType.color)
+                }
+                ScrollView {
+                    Text(logHistory)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 100)
+            }
+        }
+    }
+
+    // Modal: Change IP View
+    var changeIpView: some View {
+        Form {
+            Section(header: Text("Thông tin IP hiện tại: \(ip)")) {
+                HStack {
+                    Text("IP Mới:")
+                    TextField("192.168.1.120", text: $newIp)
+                }
+                HStack {
+                    Text("Subnet Mask:")
+                    TextField("255.255.255.0", text: $subnetMask)
+                }
+                HStack {
+                    Text("Gateway:")
+                    TextField("192.168.1.1", text: $gateway)
+                }
+                HStack {
+                    Text("User Camera:")
+                    TextField("admin", text: $camUser)
+                }
+                HStack {
+                    Text("Pass Camera:")
+                    SecureField("Mật khẩu camera", text: $camPass)
+                }
+            }
+
+            Section {
+                Button(action: executeChangeIp) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "network")
+                        Text("CẬP NHẬT IP MỚI").bold()
+                        Spacer()
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 8)
+                    .background(Color.blue)
+                    .cornerRadius(8)
+                }
+            }
+        }
+    }
+
+    // Modal: Change Password View
+    var changePassView: some View {
+        Form {
+            Section(header: Text("Đổi mật khẩu camera IP: \(ip)")) {
+                HStack {
+                    Text("Tài khoản:")
+                    TextField("admin", text: $camUser)
+                }
+                HStack {
+                    Text("Mật khẩu cũ:")
+                    SecureField("Nhập mật khẩu cũ", text: $oldPass)
+                }
+                HStack {
+                    Text("Mật khẩu mới:")
+                    SecureField("Nhập mật khẩu mới", text: $newPass)
+                }
+                HStack {
+                    Text("Xác nhận MK mới:")
+                    SecureField("Nhập lại mật khẩu mới", text: $confirmPass)
+                }
+            }
+
+            Section {
+                Button(action: executeChangePassword) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "key.fill")
+                        Text("CẬP NHẬT MẬT KHẨU MỚI").bold()
+                        Spacer()
+                    }
+                    .foregroundColor(.white)
+                    .padding(.vertical, 8)
+                    .background(Color.green)
+                    .cornerRadius(8)
+                }
+            }
+        }
+    }
+
+    private func badgeColor(for brand: CameraBrand) -> Color {
+        switch brand {
+        case .dahua: return .red
+        case .imou: return .orange
+        case .hikvision: return .pink
+        case .unv: return .blue
+        case .seetong: return .green
+        case .tiandy: return .purple
+        case .onvif: return .teal
+        case .unknown: return .gray
+        }
+    }
+
+    private func executeChangeIp() {
+        if newIp.isEmpty || camUser.isEmpty {
+            setStatus("Vui lòng nhập IP mới và tài khoản camera!", type: .error)
+            return
+        }
+        setStatus("Đang gửi lệnh đổi IP sang \(newIp)...", type: .info)
+        configManager.changeIp(ip: ip, port: port, user: camUser, pass: camPass, newIp: newIp, subnet: subnetMask, gateway: gateway) { result in
+            DispatchQueue.main.async {
+                if result.success {
+                    self.setStatus("Đã đổi IP thành công sang \(self.newIp)! 🎉", type: .success)
+                    self.ip = self.newIp
+                    self.activeModalType = nil
+                } else {
+                    self.setStatus("Lỗi đổi IP: \(result.errorMessage ?? result.rawText)", type: .error)
+                }
+            }
+        }
+    }
+
+    private func executeChangePassword() {
+        if newPass.isEmpty || newPass != confirmPass {
+            setStatus("Mật khẩu mới không trùng khớp!", type: .error)
+            return
+        }
+        setStatus("Đang gửi lệnh đổi mật khẩu...", type: .info)
+        configManager.changePassword(ip: ip, port: port, user: camUser, oldPass: oldPass, newPass: newPass) { result in
+            DispatchQueue.main.async {
+                if result.success {
+                    self.setStatus("Đã đổi mật khẩu thành công! 🎉", type: .success)
+                    self.camPass = self.newPass
+                    self.activeModalType = nil
+                } else {
+                    self.setStatus("Lỗi đổi mật khẩu: \(result.errorMessage ?? result.rawText)", type: .error)
+                }
+            }
         }
     }
 
@@ -211,7 +496,6 @@ struct ContentView: View {
                 if result.success {
                     self.appendLog("Thành công (HTTP \(result.statusCode)):\n\(result.rawText)")
                     self.rawFetchedConfig = result.rawText
-                    self.parseAndApplyChannelData(text: result.rawText)
                     self.setStatus("Đã đọc xong cấu hình DDNS từ camera!", type: .success)
                 } else {
                     let errDesc = result.errorMessage ?? "Lỗi HTTP status: \(result.statusCode)"
@@ -228,18 +512,13 @@ struct ContentView: View {
         let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanDomain = domain.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if cleanIp.isEmpty || cleanPort.isEmpty || cleanUser.isEmpty {
-            setStatus("Vui lòng nhập IP, Port và User camera!", type: .error)
-            return
-        }
-        if cleanDomain.isEmpty {
-            setStatus("Vui lòng nhập Tên miền (Domain)!", type: .error)
+        if cleanIp.isEmpty || cleanPort.isEmpty || cleanUser.isEmpty || cleanDomain.isEmpty {
+            setStatus("Vui lòng nhập IP, Port, User và Domain!", type: .error)
             return
         }
 
         isLoading = true
         setStatus("Đang lưu cấu hình DDNS lên camera...", type: .info)
-        appendLog("Cập nhật Free DDNS cho camera [\(cleanIp)]...")
 
         cgiClient.saveDahuaDDNSConfig(
             ip: cleanIp,
@@ -271,35 +550,6 @@ struct ContentView: View {
         }
     }
 
-    private func parseAndApplyChannelData(text: String) {
-        let prefix = "table.DDNS[\(selectedChannelIdx)]."
-        for line in text.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix(prefix) {
-                let parts = trimmed.dropFirst(prefix.count).components(separatedBy: "=")
-                if parts.count >= 2 {
-                    let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                    let value = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
-                    
-                    switch key {
-                    case "Enable":
-                        self.enableDdns = value.lowercased() == "true"
-                    case "Address":
-                        self.serverAddr = value
-                    case "HostName":
-                        self.domain = value
-                    case "UserName", "User":
-                        self.ddnsUser = value
-                    case "Password", "Pass":
-                        self.ddnsPass = value
-                    default:
-                        break
-                    }
-                }
-            }
-        }
-    }
-
     private func setStatus(_ msg: String, type: StatusType) {
         self.statusMessage = msg
         self.statusType = type
@@ -308,11 +558,5 @@ struct ContentView: View {
     private func appendLog(_ msg: String) {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         self.logHistory += "[\(timestamp)] \(msg)\n"
-    }
-}
-
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
     }
 }
