@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 import AVFoundation
-import SafariServices
-import AudioToolbox
 
 struct DdnsPreset: Identifiable, Hashable {
     let id = UUID()
@@ -48,7 +46,6 @@ struct ContentView: View {
     @State private var rawScannedSn: String = ""
     @State private var cleanedSn: String = ""
     @State private var showCameraScanner: Bool = false
-    @State private var activeSafariUrl: URL? = nil
 
     // Set DDNS State
     @State var ip: String = "192.168.1.108"
@@ -173,9 +170,6 @@ struct ContentView: View {
                     self.cleanedSn = self.cleanSerialNumber(val)
                 }
             ))
-        }
-        .sheet(item: $activeSafariUrl) { url in
-            SafariView(url: url)
         }
         .actionSheet(isPresented: $showActionSheet) {
             ActionSheet(
@@ -377,10 +371,7 @@ struct ContentView: View {
                             iconName: "shield.checkerboard",
                             color: .red
                         ) {
-                            let urlStr = "https://dsssecurity.vn/check-bao-hanh?sn=\(cleanedSn)"
-                            if let url = URL(string: urlStr) ?? URL(string: "https://dsssecurity.vn/check-bao-hanh") {
-                                activeSafariUrl = url
-                            }
+                            openUrl("https://dsssecurity.vn/check-bao-hanh?sn=\(cleanedSn)")
                         }
 
                         // 2. KBVISION / ADNT
@@ -390,10 +381,7 @@ struct ContentView: View {
                             iconName: "checkmark.shield.fill",
                             color: .blue
                         ) {
-                            let urlStr = "https://kbvision.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)"
-                            if let url = URL(string: urlStr) ?? URL(string: "https://kbvision.vn/tra-cuu-bao-hanh/") {
-                                activeSafariUrl = url
-                            }
+                            openUrl("https://kbvision.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)")
                         }
 
                         // 3. KBT Việt Nam
@@ -403,10 +391,7 @@ struct ContentView: View {
                             iconName: "building.2.fill",
                             color: .orange
                         ) {
-                            let urlStr = "https://kbt.net.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)"
-                            if let url = URL(string: urlStr) ?? URL(string: "https://kbt.net.vn/tra-cuu-bao-hanh/") {
-                                activeSafariUrl = url
-                            }
+                            openUrl("https://kbt.net.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)")
                         }
 
                         // 4. Tra Cứu Google Dahua/Imou
@@ -417,9 +402,7 @@ struct ContentView: View {
                             color: .green
                         ) {
                             let query = "check bao hanh dahua imou \(cleanedSn)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cleanedSn
-                            if let url = URL(string: "https://www.google.com/search?q=\(query)") {
-                                activeSafariUrl = url
-                            }
+                            openUrl("https://www.google.com/search?q=\(query)")
                         }
                     }
                 }
@@ -453,6 +436,12 @@ struct ContentView: View {
                 .padding(.top, 8)
             }
             .padding(.vertical)
+        }
+    }
+
+    private func openUrl(_ urlString: String) {
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
 
@@ -1247,8 +1236,9 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
         func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
             if let metadataObject = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
                let stringValue = metadataObject.stringValue {
-                AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
                 DispatchQueue.main.async {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                    impactFeedback.impactOccurred()
                     self.parent.scannedCode = stringValue
                     self.parent.presentationMode.wrappedValue.dismiss()
                 }
@@ -1302,16 +1292,4 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-}
-
-// MARK: - In-App Safari Controller Representation
-struct SafariView: UIViewControllerRepresentable, Identifiable {
-    let id = UUID()
-    let url: URL
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        return SFSafariViewController(url: url)
-    }
-
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
