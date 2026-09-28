@@ -20,6 +20,8 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Ứng dụng cần sử dụng Camera để quét mã vạch / QR Code chứa số Serial (S/N) phục vụ kiểm tra bảo hành camera Dahua &amp; Imou.</string>
 	<key>CFBundleIconFile</key>
 	<string>logo.png</string>
 	<key>CFBundleIconFiles</key>

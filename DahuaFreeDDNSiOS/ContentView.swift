@@ -1,5 +1,7 @@
 import SwiftUI
 import UIKit
+import AVFoundation
+import SafariServices
 
 struct DdnsPreset: Identifiable, Hashable {
     let id = UUID()
@@ -40,6 +42,12 @@ struct ContentView: View {
     @State private var activeDevice: CameraDevice? = nil
     @State private var showActionSheet = false
     @State private var activeModalType: ModalType? = nil
+
+    // Warranty Check State
+    @State private var rawScannedSn: String = ""
+    @State private var cleanedSn: String = ""
+    @State private var showCameraScanner: Bool = false
+    @State private var activeSafariUrl: URL? = nil
 
     // Set DDNS State
     @State var ip: String = "192.168.1.108"
@@ -119,15 +127,15 @@ struct ContentView: View {
             }
             .tag(1)
 
-            // Tab 3: Quét IP (Center Action Button Tab)
+            // Tab 3: Check Bảo Hành (Middle Action Tab with Barcode Camera Scanner)
             NavigationView {
-                scanView
-                    .navigationTitle("Quét IP LAN")
+                checkBaoHanhView
+                    .navigationTitle("Check Bảo Hành Camera")
                     .navigationBarTitleDisplayMode(.inline)
             }
             .tabItem {
-                Image(systemName: "viewfinder")
-                Text("Quét IP")
+                Image(systemName: "qrcode.viewfinder")
+                Text("Check Bảo Hành")
             }
             .tag(2)
 
@@ -156,6 +164,18 @@ struct ContentView: View {
             .tag(4)
         }
         .accentColor(.orange)
+        .sheet(isPresented: $showCameraScanner) {
+            BarcodeScannerSheetView(scannedCode: Binding(
+                get: { self.rawScannedSn },
+                set: { val in
+                    self.rawScannedSn = val
+                    self.cleanedSn = self.cleanSerialNumber(val)
+                }
+            ))
+        }
+        .sheet(item: $activeSafariUrl) { url in
+            SafariView(url: url)
+        }
         .actionSheet(isPresented: $showActionSheet) {
             ActionSheet(
                 title: Text("Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
@@ -166,6 +186,13 @@ struct ContentView: View {
                             self.ip = dev.ip
                             self.port = "\(dev.port)"
                             self.activeModalType = .setDdns
+                        }
+                    },
+                    .default(Text("🔍 Check Bảo Hành S/N (\(activeDevice?.sn ?? ""))")) {
+                        if let dev = activeDevice, !dev.sn.isEmpty {
+                            self.rawScannedSn = dev.sn
+                            self.cleanedSn = self.cleanSerialNumber(dev.sn)
+                            self.selectedTab = 2
                         }
                     },
                     .default(Text("🌐 Đổi địa chỉ IP")) {
@@ -221,6 +248,213 @@ struct ContentView: View {
         }
     }
 
+    // TAB 2: Check Bảo Hành View (Barcode Scanner & S/N Cleaning & Distributor Lookup)
+    var checkBaoHanhView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Header Banner
+                ZStack {
+                    LinearGradient(gradient: Gradient(colors: [Color.orange, Color.red.opacity(0.85)]), startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .cornerRadius(16)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Tra Cứu Bảo Hành Camera")
+                                .font(.title3)
+                                .bold()
+                                .foregroundColor(.white)
+
+                            Text("Quét mã Barcode / QR Code S/N hoặc nhập trực tiếp để kiểm tra với các nhà phân phối tại VN.")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+                        Spacer()
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.system(size: 44))
+                            .foregroundColor(.white)
+                    }
+                    .padding(16)
+                }
+                .padding(.horizontal)
+
+                // Camera Scanner Trigger Button
+                Button(action: {
+                    showCameraScanner = true
+                }) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "camera.fill")
+                            .font(.headline)
+                        Text("📷 MỞ CAMERA QUÉT MÃ VẠCH (S/N)")
+                            .font(.headline)
+                            .bold()
+                        Spacer()
+                    }
+                    .padding(.vertical, 14)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    .shadow(color: Color.orange.opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+                .padding(.horizontal)
+
+                // Manual Input Section
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Hoặc nhập số Serial (S/N)")
+                        .font(.subheadline)
+                        .bold()
+
+                    HStack {
+                        Image(systemName: "barcode")
+                            .foregroundColor(.gray)
+
+                        TextField("Nhập hoặc dán S/N camera...", text: Binding(
+                            get: { self.rawScannedSn },
+                            set: { newValue in
+                                self.rawScannedSn = newValue
+                                self.cleanedSn = self.cleanSerialNumber(newValue)
+                            }
+                        ))
+                        .autocapitalization(.allCharacters)
+                        .disableAutocorrection(true)
+
+                        if !rawScannedSn.isEmpty {
+                            Button(action: {
+                                rawScannedSn = ""
+                                cleanedSn = ""
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                }
+                .padding(.horizontal)
+
+                // Cleaned S/N Result Card
+                if !cleanedSn.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Image(systemName: "checkmark.seal.fill")
+                                .foregroundColor(.green)
+                            Text("Số S/N Đã Chuẩn Hóa:")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+
+                        Text(cleanedSn)
+                            .font(.system(size: 22, weight: .bold, design: .monospaced))
+                            .foregroundColor(.blue)
+
+                        Text("Đã tự động lọc phần thừa (prefix/suffix/space).")
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                    }
+                    .padding(14)
+                    .background(Color.blue.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                    )
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+
+                    // Distributor Check Actions
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Chọn Nhà Phân Phối Tra Cứu Bảo Hành:")
+                            .font(.headline)
+                            .padding(.horizontal)
+
+                        // 1. DSS Việt Nam
+                        DistributorCard(
+                            name: "DSS Việt Nam",
+                            subtitle: "Nhà phân phối Dahua & Imou chính hãng",
+                            iconName: "shield.checkerboard",
+                            color: .red
+                        ) {
+                            let urlStr = "https://dsssecurity.vn/check-bao-hanh?sn=\(cleanedSn)"
+                            if let url = URL(string: urlStr) ?? URL(string: "https://dsssecurity.vn/check-bao-hanh") {
+                                activeSafariUrl = url
+                            }
+                        }
+
+                        // 2. KBVISION / ADNT
+                        DistributorCard(
+                            name: "KBVISION Việt Nam / ADNT",
+                            subtitle: "Nhà phân phối KBVision & Dahua",
+                            iconName: "checkmark.shield.fill",
+                            color: .blue
+                        ) {
+                            let urlStr = "https://kbvision.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)"
+                            if let url = URL(string: urlStr) ?? URL(string: "https://kbvision.vn/tra-cuu-bao-hanh/") {
+                                activeSafariUrl = url
+                            }
+                        }
+
+                        // 3. KBT Việt Nam
+                        DistributorCard(
+                            name: "KBT Việt Nam",
+                            subtitle: "Nhà phân phối thiết bị an ninh KBT",
+                            iconName: "building.2.fill",
+                            color: .orange
+                        ) {
+                            let urlStr = "https://kbt.net.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)"
+                            if let url = URL(string: urlStr) ?? URL(string: "https://kbt.net.vn/tra-cuu-bao-hanh/") {
+                                activeSafariUrl = url
+                            }
+                        }
+
+                        // 4. Tra Cứu Google Dahua/Imou
+                        DistributorCard(
+                            name: "Tra Cứu Google / Tổng Hợp",
+                            subtitle: "Tìm thông tin S/N \(cleanedSn) trên hệ thống",
+                            iconName: "magnifyingglass",
+                            color: .green
+                        ) {
+                            let query = "check bao hanh dahua imou \(cleanedSn)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cleanedSn
+                            if let url = URL(string: "https://www.google.com/search?q=\(query)") {
+                                activeSafariUrl = url
+                            }
+                        }
+                    }
+                }
+
+                // Quick Scan LAN Button inside Warranty View
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Quét IP Mạng LAN")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    Button(action: { scanner.startScan() }) {
+                        HStack {
+                            Spacer()
+                            if scanner.isScanning {
+                                ProgressView().padding(.trailing, 8)
+                            } else {
+                                Image(systemName: "network")
+                            }
+                            Text(scanner.isScanning ? "ĐANG QUÉT MẠNG LAN..." : "BẮT ĐẦU QUÉT MẠNG LAN TÌM S/N")
+                                .bold()
+                            Spacer()
+                        }
+                        .padding(.vertical, 10)
+                        .background(scanner.isScanning ? Color.gray : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    .padding(.horizontal)
+                    .disabled(scanner.isScanning)
+                }
+                .padding(.top, 8)
+            }
+            .padding(.vertical)
+        }
+    }
+
     // TAB 0: Trang chủ (Home Banner & Dashboard)
     var trangChuView: some View {
         ScrollView {
@@ -237,15 +471,14 @@ struct ContentView: View {
                                 .bold()
                                 .foregroundColor(.white)
 
-                            Text("Enjoy Smart Life • Quét LAN & Cài DDNS Tự Động")
+                            Text("Enjoy Smart Life • Check Bảo Hành & Cài DDNS Tự Động")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.9))
 
                             Button(action: {
                                 selectedTab = 2
-                                scanner.startScan()
                             }) {
-                                Text("Quét IP Ngay 🚀")
+                                Text("Check Bảo Hành S/N 🔍")
                                     .font(.caption)
                                     .bold()
                                     .padding(.horizontal, 12)
@@ -274,11 +507,10 @@ struct ContentView: View {
                         .padding(.horizontal)
 
                     HStack(spacing: 12) {
-                        QuickTile(title: "Quét Mạng LAN", icon: "viewfinder", color: .blue) {
+                        QuickTile(title: "Check Bảo Hành", icon: "qrcode.viewfinder", color: .orange) {
                             selectedTab = 2
-                            scanner.startScan()
                         }
-                        QuickTile(title: "Cấu Hình DDNS", icon: "gearshape.2.fill", color: .orange) {
+                        QuickTile(title: "Cấu Hình DDNS", icon: "gearshape.2.fill", color: .blue) {
                             selectedTab = 3
                         }
                         QuickTile(title: "Đổi IP Camera", icon: "network", color: .green) {
@@ -294,8 +526,9 @@ struct ContentView: View {
                         Text("Thiết Bị Phát Hiện (\(scanner.discoveredDevices.count))")
                             .font(.headline)
                         Spacer()
-                        Button("Xem tất cả") {
+                        Button("Quét ngay") {
                             selectedTab = 2
+                            scanner.startScan()
                         }
                         .font(.subheadline)
                         .foregroundColor(.orange)
@@ -310,7 +543,7 @@ struct ContentView: View {
                             Text("Chưa quét thiết bị nào trong LAN.")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            Button("Nhấn vào đây để quét ngay") {
+                            Button("Nhấn vào đây để quét tìm S/N ngay") {
                                 selectedTab = 2
                                 scanner.startScan()
                             }
@@ -337,10 +570,10 @@ struct ContentView: View {
                                     }
                                 }
                                 Spacer()
-                                Button("Cấu Hình") {
-                                    self.ip = dev.ip
-                                    self.port = "\(dev.port)"
-                                    self.selectedTab = 3
+                                Button("Check S/N") {
+                                    self.rawScannedSn = dev.sn
+                                    self.cleanedSn = self.cleanSerialNumber(dev.sn)
+                                    self.selectedTab = 2
                                 }
                                 .font(.caption)
                                 .padding(.horizontal, 10)
@@ -386,101 +619,6 @@ struct ContentView: View {
                         }
                     }
                     .padding(.vertical, 4)
-                }
-            }
-        }
-        .listStyle(GroupedListStyle())
-    }
-
-    // TAB 2: Quét IP LAN View
-    var scanView: some View {
-        List {
-            Section {
-                Button(action: { scanner.startScan() }) {
-                    HStack {
-                        Spacer()
-                        if scanner.isScanning {
-                            ProgressView().padding(.trailing, 8)
-                        } else {
-                            Image(systemName: "viewfinder")
-                        }
-                        Text(scanner.isScanning ? "ĐANG QUÉT MẠNG LAN..." : "BẮT ĐẦU QUÉT IP CAMERA")
-                            .bold()
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
-                    .foregroundColor(.white)
-                    .background(scanner.isScanning ? Color.gray : Color.orange)
-                    .cornerRadius(10)
-                }
-                .disabled(scanner.isScanning)
-
-                if scanner.isScanning {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ProgressView(value: scanner.progress)
-                        Text(scanner.statusMessage)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
-
-            Section(header: Text("Danh sách thiết bị quét được (\(scanner.discoveredDevices.count))")) {
-                if scanner.discoveredDevices.isEmpty && !scanner.isScanning {
-                    Text("Chưa tìm thấy camera nào. Nhấn Bắt đầu quét để tìm thiết bị trong LAN.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    ForEach(0..<scanner.discoveredDevices.count, id: \.self) { idx in
-                        let dev = scanner.discoveredDevices[idx]
-                        HStack(alignment: .center, spacing: 12) {
-                            CameraLogoIcon(brand: dev.brand)
-
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("\(dev.ip):\(dev.port)")
-                                    .font(.headline)
-
-                                if !dev.sn.isEmpty {
-                                    Text("🔵 S/N: \(dev.sn)")
-                                        .font(.caption)
-                                        .bold()
-                                        .foregroundColor(.blue)
-                                }
-
-                                if !dev.model.isEmpty {
-                                    Text("⚙️ Model: \(dev.model)")
-                                        .font(.caption)
-                                        .foregroundColor(.primary)
-                                }
-
-                                if !dev.mac.isEmpty {
-                                    Text("📶 MAC: \(dev.mac)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                if !dev.extraInfo.isEmpty {
-                                    Text("Giao thức: \(dev.extraInfo)")
-                                        .font(.caption2)
-                                        .foregroundColor(.gray)
-                                }
-                            }
-
-                            Spacer()
-
-                            Button(action: {
-                                self.activeDevice = dev
-                                self.showActionSheet = true
-                            }) {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.title3)
-                                    .foregroundColor(.orange)
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                        }
-                        .padding(.vertical, 4)
-                    }
                 }
             }
         }
@@ -631,7 +769,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Dahua & Imou Manager")
                             .font(.headline)
-                        Text("Phiên bản 1.0.0 (Free DDNS Build)")
+                        Text("Phiên bản 1.0.0 (Check Bảo Hành & Free DDNS)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -769,6 +907,31 @@ struct ContentView: View {
                 .cornerRadius(8)
             }
         }
+    }
+
+    // Serial Number Cleaning Helper Function
+    private func cleanSerialNumber(_ input: String) -> String {
+        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let prefixes = ["S/N:", "S/N", "SN:", "SN", "SERIAL:", "SERIAL", "Serial:", "Serial", "sn:", "s/n:"]
+        for prefix in prefixes {
+            if raw.uppercased().hasPrefix(prefix.uppercased()) {
+                raw = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        if raw.contains("sn=") || raw.contains("SN=") {
+            let components = raw.components(separatedBy: CharacterSet(charactersIn: "=&?"))
+            for (idx, comp) in components.enumerated() {
+                if comp.lowercased() == "sn" && idx + 1 < components.count {
+                    raw = components[idx + 1]
+                    break
+                }
+            }
+        }
+
+        let cleaned = raw.components(separatedBy: CharacterSet.alphanumerics.inverted).joined().uppercased()
+        return cleaned
     }
 
     // Business Logic
@@ -913,6 +1076,48 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Distributor Card Component
+struct DistributorCard: View {
+    let name: String
+    let subtitle: String
+    let iconName: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: iconName)
+                    .font(.title2)
+                    .foregroundColor(color)
+                    .frame(width: 44, height: 44)
+                    .background(color.opacity(0.12))
+                    .cornerRadius(10)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            .padding(12)
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(12)
+        }
+        .padding(.horizontal)
+    }
+}
+
+// MARK: - Quick Tile Component
 struct QuickTile: View {
     let title: String
     let icon: String
@@ -938,6 +1143,7 @@ struct QuickTile: View {
     }
 }
 
+// MARK: - Camera Logo Icon Component
 struct CameraLogoIcon: View {
     let brand: CameraBrand
 
@@ -979,4 +1185,132 @@ struct CameraLogoIcon: View {
             }
         }
     }
+}
+
+// MARK: - Barcode Scanner Sheet Wrapper
+struct BarcodeScannerSheetView: View {
+    @Binding var scannedCode: String
+    @Environment(\.presentationMode) var presentationMode
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                BarcodeScannerView(scannedCode: $scannedCode)
+                    .edgesIgnoringSafeArea(.all)
+
+                VStack {
+                    Text("Đưa mã vạch / QR Code số S/N vào khung hình")
+                        .font(.subheadline)
+                        .bold()
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(20)
+                        .padding(.top, 20)
+
+                    Spacer()
+
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.orange, lineWidth: 3)
+                        .frame(width: 260, height: 260)
+
+                    Spacer()
+                }
+            }
+            .navigationTitle("Quét Mã Vạch S/N")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Đóng") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - AVFoundation Barcode Scanner Implementation
+struct BarcodeScannerView: UIViewControllerRepresentable {
+    @Binding var scannedCode: String
+    @Environment(\.presentationMode) var presentationMode
+
+    class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
+        var parent: BarcodeScannerView
+
+        init(parent: BarcodeScannerView) {
+            self.parent = parent
+        }
+
+        func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+            if let metadataObject = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+               let stringValue = metadataObject.stringValue {
+                AudioServicesPlaySystemSound(SystemSoundID(kSystemSoundID_Vibrate))
+                DispatchQueue.main.async {
+                    self.parent.scannedCode = stringValue
+                    self.parent.presentationMode.wrappedValue.dismiss()
+                }
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let viewController = UIViewController()
+        let captureSession = AVCaptureSession()
+
+        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else { return viewController }
+        let videoInput: AVCaptureDeviceInput
+
+        do {
+            videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
+        } catch {
+            return viewController
+        }
+
+        if captureSession.canAddInput(videoInput) {
+            captureSession.addInput(videoInput)
+        } else {
+            return viewController
+        }
+
+        let metadataOutput = AVCaptureMetadataOutput()
+
+        if captureSession.canAddOutput(metadataOutput) {
+            captureSession.addOutput(metadataOutput)
+            metadataOutput.setMetadataObjectsDelegate(context.coordinator, queue: DispatchQueue.main)
+            metadataOutput.metadataObjectTypes = [.qr, .code128, .code39, .ean13, .ean8, .pdf417, .dataMatrix]
+        } else {
+            return viewController
+        }
+
+        let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        previewLayer.frame = viewController.view.layer.bounds
+        previewLayer.videoGravity = .resizeAspectFill
+        viewController.view.layer.addSublayer(previewLayer)
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            captureSession.startRunning()
+        }
+
+        return viewController
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
+
+// MARK: - In-App Safari Controller Representation
+struct SafariView: UIViewControllerRepresentable, Identifiable {
+    let id = UUID()
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        return SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
