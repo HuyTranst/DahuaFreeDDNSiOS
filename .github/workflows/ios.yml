@@ -17,10 +17,19 @@ jobs:
         with:
           xcode-version: '15.4'
 
-      - name: Build iOS App with Xcode
+      - name: Find Project and Build iOS App
         run: |
+          PROJ_PATH=$(find . -name "DahuaFreeDDNSiOS.xcodeproj" -type d | head -n 1)
+          if [ -z "$PROJ_PATH" ]; then
+            echo "Error: DahuaFreeDDNSiOS.xcodeproj not found!"
+            exit 1
+          fi
+          PROJ_DIR=$(dirname "$PROJ_PATH")
+          echo "Found project directory at: $PROJ_DIR"
+          cd "$PROJ_DIR"
+
           xcodebuild -project DahuaFreeDDNSiOS.xcodeproj \
-                     -scheme DahuaFreeDDNSiOS \
+                     -target DahuaFreeDDNSiOS \
                      -configuration Release \
                      -sdk iphoneos \
                      -derivedDataPath build \
@@ -28,14 +37,17 @@ jobs:
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGNING_REQUIRED=NO
 
-      - name: Create Payload directory & Package IPA
-        run: |
           mkdir -p Payload
-          cp -R build/Build/Products/Release-iphoneos/DahuaFreeDDNS.app Payload/
+          APP_PATH=$(find build -name "DahuaFreeDDNS.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find build -name "*.app" -type d | head -n 1)
+          fi
+          echo "Copying app from: $APP_PATH"
+          cp -R "$APP_PATH" Payload/
           zip -r DahuaFreeDDNS-Real.ipa Payload
 
       - name: Upload Compiled IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DahuaFreeDDNS-Real-IPA
-          path: DahuaFreeDDNS-Real.ipa
+          path: "**/DahuaFreeDDNS-Real.ipa"
