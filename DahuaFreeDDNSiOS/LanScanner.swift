@@ -1,6 +1,5 @@
 import Foundation
-import Network
-import Darwin
+import Combine
 
 enum CameraBrand: String, CaseIterable, Identifiable {
     case dahua = "Dahua"
@@ -56,8 +55,10 @@ class LanScanner: ObservableObject {
             let totalHosts = 254
             var completedCount = 0
 
-            // Send UDP DHDiscover broadcast
-            self.sendUDPDiscovery()
+            let sessionConfig = URLSessionConfiguration.default
+            sessionConfig.timeoutIntervalForRequest = 1.0
+            sessionConfig.timeoutIntervalForResource = 1.0
+            let session = URLSession(configuration: sessionConfig)
 
             let semaphore = DispatchSemaphore(value: 32)
 
@@ -66,17 +67,17 @@ class LanScanner: ObservableObject {
                 semaphore.wait()
 
                 group.enter()
-                DispatchQueue.global().async {
+                self.probeSingleIp(ip: targetIp, session: session) { device in
                     defer {
                         semaphore.signal()
                         group.leave()
                     }
 
-                    if let device = self.probeDevice(ip: targetIp) {
+                    if let dev = device {
                         lock.lock()
-                        if !self.discoveredDevices.contains(where: { $0.ip == device.ip }) {
+                        if !self.discoveredDevices.contains(where: { $0.ip == dev.ip }) {
                             DispatchQueue.main.async {
-                                self.discoveredDevices.append(device)
+                                self.discoveredDevices.append(dev)
                             }
                         }
                         lock.unlock()
@@ -102,144 +103,63 @@ class LanScanner: ObservableObject {
         }
     }
 
-    private func probeDevice(ip: String) -> CameraDevice? {
-        let is37777Open = isPortOpen(ip: ip, port: 37777, timeoutSec: 0.5)
-        let is80Open = isPortOpen(ip: ip, port: 80, timeoutSec: 0.5)
-        let is8000Open = isPortOpen(ip: ip, port: 8000, timeoutSec: 0.5)
-        let is34567Open = isPortOpen(ip: ip, port: 34567, timeoutSec: 0.5)
-        let is8080Open = isPortOpen(ip: ip, port: 8080, timeoutSec: 0.5)
+    private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
+        let ports = [80, 37777, 8000, 8080]
+        var foundDevice: CameraDevice? = nil
+        let innerGroup = DispatchGroup()
 
-        if !is37777Open && !is80Open && !is8000Open && !is34567Open && !is8080Open {
-            return nil
-        }
+        for port in ports {
+            if foundDevice != nil { break }
 
-        var brand: CameraBrand = .unknown
-        var extraBanner = ""
+            guard let url = URL(string: "http://\(ip):\(port)/") else { continue }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.timeoutInterval = 1.0
 
-        if is37777Open {
-            brand = .dahua
-            let banner = checkHttpBanner(ip: ip, port: is80Open ? 80 : 8080)
-            if banner.contains("imou") || banner.contains("lechange") {
-                brand = .imou
-            }
-            extraBanner = "Port 37777 (Dahua/Imou)"
-        } else if is8000Open {
-            brand = .hikvision
-            extraBanner = "Port 8000 (Hikvision SADP)"
-        } else if is34567Open {
-            brand = .seetong
-            extraBanner = "Port 34567 (Seetong)"
-        } else if is80Open || is8080Open {
-            let port = is80Open ? 80 : 8080
-            let banner = checkHttpBanner(ip: ip, port: port)
-            if banner.contains("dahua") {
-                brand = .dahua
-            } else if banner.contains("imou") || banner.contains("lechange") {
-                brand = .imou
-            } else if banner.contains("hikvision") {
-                brand = .hikvision
-            } else if banner.contains("uniview") || banner.contains("unv") {
-                brand = .unv
-            } else if banner.contains("tiandy") {
-                brand = .tiandy
-            } else {
-                brand = .unknown
-            }
-            extraBanner = "Port \(port)"
-        }
+            innerGroup.enter()
+            let task = session.dataTask(with: request) { data, response, error in
+                defer { innerGroup.leave() }
 
-        let primaryPort = is80Open ? 80 : (is37777Open ? 37777 : (is8080Open ? 8080 : 8000))
-        return CameraDevice(
-            ip: ip,
-            port: primaryPort,
-            brand: brand,
-            model: "",
-            mac: "",
-            extraInfo: extraBanner
-        )
-    }
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+                if statusCode > 0 || error == nil {
+                    let httpRes = response as? HTTPURLResponse
+                    let server = (httpRes?.allHeaderFields["Server"] as? String)?.lowercased() ?? ""
+                    let auth = (httpRes?.allHeaderFields["WWW-Authenticate"] as? String)?.lowercased() ?? ""
+                    let body = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
+                    let combined = "\(server) \(auth) \(body)"
 
-    private func isPortOpen(ip: String, port: Int32, timeoutSec: Double) -> Bool {
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = UInt16(port).bigEndian
-        guard inet_pton(AF_INET, ip, &addr.sin_addr) == 1 else { return false }
+                    var brand: CameraBrand = .unknown
+                    if combined.contains("imou") || combined.contains("lechange") {
+                        brand = .imou
+                    } else if combined.contains("dahua") || port == 37777 {
+                        brand = .dahua
+                    } else if combined.contains("hikvision") || port == 8000 {
+                        brand = .hikvision
+                    } else if combined.contains("uniview") || combined.contains("unv") {
+                        brand = .unv
+                    } else if combined.contains("seetong") {
+                        brand = .seetong
+                    } else if combined.contains("tiandy") {
+                        brand = .tiandy
+                    }
 
-        let sock = socket(AF_INET, SOCK_STREAM, 0)
-        if sock < 0 { return false }
-        defer { close(sock) }
-
-        var flags = fcntl(sock, F_GETFL, 0)
-        _ = fcntl(sock, F_SETFL, flags | O_NONBLOCK)
-
-        var res = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(sock, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-
-        if res < 0 {
-            if errno != EINPROGRESS { return false }
-            var writefds = fd_set()
-            FD_ZERO(&writefds)
-            FD_SET(sock, &writefds)
-
-            var tv = timeval(tv_sec: 0, tv_usec: suseconds_t(timeoutSec * 1_000_000))
-            let selectRes = select(sock + 1, nil, &writefds, nil, &tv)
-            if selectRes <= 0 { return false }
-
-            var err: Int32 = 0
-            var len = socklen_t(MemoryLayout<Int32>.size)
-            getsockopt(sock, SOL_SOCKET, SO_ERROR, &err, &len)
-            if err != 0 { return false }
-        }
-        return true
-    }
-
-    private func checkHttpBanner(ip: String, port: Int) -> String {
-        guard let url = URL(string: "http://\(ip):\(port)/") else { return "" }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 1.0
-
-        var bannerText = ""
-        let semaphore = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            if let httpRes = response as? HTTPURLResponse {
-                let server = (httpRes.allHeaderFields["Server"] as? String) ?? ""
-                let auth = (httpRes.allHeaderFields["WWW-Authenticate"] as? String) ?? ""
-                let body = String(data: data ?? Data(), encoding: .utf8) ?? ""
-                bannerText = "\(server) \(auth) \(body)".lowercased()
-            }
-            semaphore.signal()
-        }.resume()
-
-        _ = semaphore.wait(timeout: .now() + 1.2)
-        return bannerText
-    }
-
-    private func sendUDPDiscovery() {
-        let payload = "{\"method\":\"DHDiscover.search\",\"params\":{\"mac\":\"\"}}"
-        guard let data = payload.data(using: .utf8) else { return }
-
-        let sock = socket(AF_INET, SOCK_DGRAM, 0)
-        if sock < 0 { return }
-        defer { close(sock) }
-
-        var broadcastEnable = Int32(1)
-        setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, socklen_t(MemoryLayout<Int32>.size))
-
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = UInt16(37810).bigEndian
-        inet_pton(AF_INET, "255.255.255.255", &addr.sin_addr)
-
-        _ = data.withUnsafeBytes { ptr in
-            withUnsafePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
-                    sendto(sock, ptr.baseAddress, data.count, 0, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    if foundDevice == nil && (statusCode > 0 || port == 37777) {
+                        foundDevice = CameraDevice(
+                            ip: ip,
+                            port: port,
+                            brand: brand,
+                            model: "",
+                            mac: "",
+                            extraInfo: "Port \(port)"
+                        )
+                    }
                 }
             }
+            task.resume()
+        }
+
+        innerGroup.notify(queue: .global()) {
+            completion(foundDevice)
         }
     }
 
