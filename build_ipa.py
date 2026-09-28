@@ -47,7 +47,11 @@ def create_ipa():
             shutil.copyfile(os.path.join(src_dir, item), os.path.join(app_dir, item))
 
     if os.path.exists(os.path.join(project_dir, "logo.png")):
-        shutil.copyfile(os.path.join(project_dir, "logo.png"), os.path.join(app_dir, "logo.png"))
+        logo_path = os.path.join(project_dir, "logo.png")
+        shutil.copyfile(logo_path, os.path.join(app_dir, "logo.png"))
+        shutil.copyfile(logo_path, os.path.join(app_dir, "AppIcon60x60@2x.png"))
+        shutil.copyfile(logo_path, os.path.join(app_dir, "AppIcon76x76@2x.png"))
+        shutil.copyfile(logo_path, os.path.join(app_dir, "AppIcon.png"))
     if os.path.exists(os.path.join(project_dir, "camera_logo.png")):
         shutil.copyfile(os.path.join(project_dir, "camera_logo.png"), os.path.join(app_dir, "camera_logo.png"))
 

@@ -20,6 +20,27 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>CFBundleIconFile</key>
+	<string>logo.png</string>
+	<key>CFBundleIconFiles</key>
+	<array>
+		<string>logo.png</string>
+		<string>AppIcon60x60@2x.png</string>
+		<string>camera_logo.png</string>
+	</array>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundlePrimaryIcon</key>
+		<dict>
+			<key>CFBundleIconFiles</key>
+			<array>
+				<string>logo.png</string>
+				<string>AppIcon60x60@2x.png</string>
+			</array>
+			<key>UIPrerenderedIcon</key>
+			<false/>
+		</dict>
+	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
