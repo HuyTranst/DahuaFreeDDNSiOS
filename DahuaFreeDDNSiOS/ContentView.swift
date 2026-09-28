@@ -33,6 +33,202 @@ let sampleProducts: [CameraProduct] = [
     CameraProduct(name: "Dahua DH-XVR5104HS-I3", category: "Đầu Ghi XVR", resolution: "4 Kênh 5M-N", desc: "AI WizSense, bảo vệ chu vi, SMD Plus.", iconName: "server.rack")
 ]
 
+// MARK: - Warranty Models & Client API
+struct WarrantyResultItem: Identifiable {
+    let id = UUID()
+    let supplier: String
+    let productCode: String
+    let productName: String
+    let serialNumber: String
+    let exportDate: String
+    let warrantyMonths: String
+    let expireDate: String
+    let remainingDays: Int?
+    let dealer: String
+    let warehouse: String
+    let isValid: Bool
+    let isProductOnly: Bool
+}
+
+class DahuaWarrantyClient {
+    private let session: URLSession
+
+    init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 8.0
+        config.timeoutIntervalForResource = 8.0
+        self.session = URLSession(configuration: config)
+    }
+
+    func checkWarranty(sn: String, completion: @escaping ([WarrantyResultItem]) -> Void) {
+        let cleanSn = sn.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanSn.isEmpty else {
+            completion([])
+            return
+        }
+
+        let group = DispatchGroup()
+        var results: [WarrantyResultItem] = []
+        let lock = NSLock()
+
+        // 1. Query DSS Vietnam API (https://app.dahua.vn:7778/Api.svc/Web/TraCuuBaoHanhTheoSeria?seria=...)
+        group.enter()
+        queryDSS(sn: cleanSn) { dssResults in
+            lock.lock()
+            results.append(contentsOf: dssResults)
+            lock.unlock()
+            group.leave()
+        }
+
+        // 2. Query Dahua Global Support API (https://supportapi.dahuasecurity.com/support/api/doc/docOverseasProduct/selectInfoBtSN?serialNumber=...)
+        group.enter()
+        queryDahuaGlobal(sn: cleanSn) { globalResults in
+            lock.lock()
+            results.append(contentsOf: globalResults)
+            lock.unlock()
+            group.leave()
+        }
+
+        group.notify(queue: .main) {
+            completion(results)
+        }
+    }
+
+    private func queryDSS(sn: String, completion: @escaping ([WarrantyResultItem]) -> Void) {
+        guard let url = URL(string: "https://app.dahua.vn:7778/Api.svc/Web/TraCuuBaoHanhTheoSeria?seria=\(sn)") else {
+            completion([])
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+
+        let task = session.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else {
+                completion([])
+                return
+            }
+
+            do {
+                if let rootObj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let dRaw = rootObj["d"] {
+
+                    var items: [[String: Any]] = []
+                    if let dStr = dRaw as? String, let dData = dStr.data(using: .utf8) {
+                        if let parsedItems = try? JSONSerialization.jsonObject(with: dData) as? [[String: Any]] {
+                            items = parsedItems
+                        }
+                    } else if let parsedItems = dRaw as? [[String: Any]] {
+                        items = parsedItems
+                    }
+
+                    var parsedResults: [WarrantyResultItem] = []
+                    for it in items {
+                        let remDays = it["SoNgayBaoHanhConLai"] as? Int
+                        let isValid = (remDays ?? -1) > 0
+
+                        let productCode = (it["MaHangHoa"] as? String) ?? ""
+                        let productName = (it["TenHangHoa"] as? String) ?? "Camera IPC Dahua/Imou"
+                        let serialNumber = (it["SoSeria"] as? String) ?? sn
+                        let exportDate = (it["NgayXuat"] as? String) ?? ""
+                        let thangBh = (it["SoThangBaoHanh"] as? Int) ?? 24
+                        let dealer = ((it["TenMD"] as? String) ?? "").replacingOccurrences(of: "Cng Ty", with: "Công Ty")
+                        let warehouse = ((it["TenKho"] as? String) ?? "").replacingOccurrences(of: "Kho hng", with: "Kho hàng")
+
+                        var expireStr = ""
+                        if !exportDate.isEmpty {
+                            let parts = exportDate.components(separatedBy: "/")
+                            if parts.count == 3,
+                               let day = Int(parts[0]), let month = Int(parts[1]), let year = Int(parts[2]) {
+                                let totalMonths = month + thangBh
+                                let expYear = year + (totalMonths - 1) / 12
+                                let expMonth = ((totalMonths - 1) % 12) + 1
+                                expireStr = String(format: "%02d/%02d/%04d", day, expMonth, expYear)
+                            }
+                        }
+
+                        let item = WarrantyResultItem(
+                            supplier: "DSS TECH.,JSC (Dahua Vietnam)",
+                            productCode: productCode,
+                            productName: productName,
+                            serialNumber: serialNumber,
+                            exportDate: exportDate,
+                            warrantyMonths: "\(thangBh) tháng",
+                            expireDate: expireStr,
+                            remainingDays: remDays,
+                            dealer: dealer,
+                            warehouse: warehouse,
+                            isValid: isValid,
+                            isProductOnly: false
+                        )
+                        parsedResults.append(item)
+                    }
+                    completion(parsedResults)
+                    return
+                }
+            } catch {
+                print("DSS Parse Error: \(error)")
+            }
+            completion([])
+        }
+        task.resume()
+    }
+
+    private func queryDahuaGlobal(sn: String, completion: @escaping ([WarrantyResultItem]) -> Void) {
+        guard let url = URL(string: "https://supportapi.dahuasecurity.com/support/api/doc/docOverseasProduct/selectInfoBtSN?serialNumber=\(sn)") else {
+            completion([])
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("https://support.dahuasecurity.com/", forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+
+        let task = session.dataTask(with: request) { data, response, error in
+            guard let data = data, error == nil else {
+                completion([])
+                return
+            }
+
+            do {
+                if let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let obj = root["data"] as? [String: Any] {
+
+                    let inModel = (obj["inModel"] as? String) ?? ""
+                    let prodName = (obj["prodName"] as? String) ?? ""
+
+                    if !inModel.isEmpty || !prodName.isEmpty {
+                        let item = WarrantyResultItem(
+                            supplier: "Dahua Global Official Support",
+                            productCode: inModel,
+                            productName: prodName.isEmpty ? "Thiết bị Dahua / Imou" : prodName,
+                            serialNumber: (obj["serialNumber"] as? String) ?? sn,
+                            exportDate: "",
+                            warrantyMonths: "",
+                            expireDate: "",
+                            remainingDays: nil,
+                            dealer: "Dahua Overseas",
+                            warehouse: "",
+                            isValid: true,
+                            isProductOnly: true
+                        )
+                        completion([item])
+                        return
+                    }
+                }
+            } catch {
+                print("Dahua Global Parse Error: \(error)")
+            }
+            completion([])
+        }
+        task.resume()
+    }
+}
+
+// MARK: - Main ContentView
 struct ContentView: View {
     @StateObject private var scanner = LanScanner()
     @State private var selectedTab: Int = 0
@@ -46,6 +242,9 @@ struct ContentView: View {
     @State private var rawScannedSn: String = ""
     @State private var cleanedSn: String = ""
     @State private var showCameraScanner: Bool = false
+    @State private var isCheckingWarranty: Bool = false
+    @State private var warrantyResults: [WarrantyResultItem] = []
+    @State private var warrantyCheckError: String? = nil
 
     // Set DDNS State
     @State var ip: String = "192.168.1.108"
@@ -78,6 +277,7 @@ struct ContentView: View {
     @State private var rawFetchedConfig: String = ""
 
     private let cgiClient = DahuaCgiClient()
+    private let warrantyClient = DahuaWarrantyClient()
 
     enum StatusType {
         case info, success, error
@@ -125,7 +325,7 @@ struct ContentView: View {
             }
             .tag(1)
 
-            // Tab 3: Check Bảo Hành (Middle Action Tab with Barcode Camera Scanner)
+            // Tab 3: Check Bảo Hành (Middle Action Tab with Barcode Camera Scanner & Direct API)
             NavigationView {
                 checkBaoHanhView
                     .navigationTitle("Check Bảo Hành Camera")
@@ -167,7 +367,9 @@ struct ContentView: View {
                 get: { self.rawScannedSn },
                 set: { val in
                     self.rawScannedSn = val
-                    self.cleanedSn = self.cleanSerialNumber(val)
+                    let cleaned = self.cleanSerialNumber(val)
+                    self.cleanedSn = cleaned
+                    self.triggerDirectWarrantyCheck(sn: cleaned)
                 }
             ))
         }
@@ -185,9 +387,11 @@ struct ContentView: View {
                     },
                     .default(Text("🔍 Check Bảo Hành S/N (\(activeDevice?.sn ?? ""))")) {
                         if let dev = activeDevice, !dev.sn.isEmpty {
+                            let cleaned = self.cleanSerialNumber(dev.sn)
                             self.rawScannedSn = dev.sn
-                            self.cleanedSn = self.cleanSerialNumber(dev.sn)
+                            self.cleanedSn = cleaned
                             self.selectedTab = 2
+                            self.triggerDirectWarrantyCheck(sn: cleaned)
                         }
                     },
                     .default(Text("🌐 Đổi địa chỉ IP")) {
@@ -243,7 +447,7 @@ struct ContentView: View {
         }
     }
 
-    // TAB 2: Check Bảo Hành View (Barcode Scanner & S/N Cleaning & Distributor Lookup)
+    // TAB 2: Check Bảo Hành View (Barcode Scanner & Direct API Lookup)
     var checkBaoHanhView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -254,12 +458,12 @@ struct ContentView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Tra Cứu Bảo Hành Camera")
+                            Text("Tra Cứu Bảo Hành Direct API")
                                 .font(.title3)
                                 .bold()
                                 .foregroundColor(.white)
 
-                            Text("Quét mã Barcode / QR Code S/N hoặc nhập trực tiếp để kiểm tra với các nhà phân phối tại VN.")
+                            Text("Quét mã Barcode / QR Code S/N hoặc nhập để kiểm tra trực tiếp qua API DSS Việt Nam & Dahua Global.")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.9))
                         }
@@ -303,11 +507,12 @@ struct ContentView: View {
                         Image(systemName: "barcode")
                             .foregroundColor(.gray)
 
-                        TextField("Nhập hoặc dán S/N camera...", text: Binding(
+                        TextField("Nhập S/N camera...", text: Binding(
                             get: { self.rawScannedSn },
                             set: { newValue in
                                 self.rawScannedSn = newValue
-                                self.cleanedSn = self.cleanSerialNumber(newValue)
+                                let cleaned = self.cleanSerialNumber(newValue)
+                                self.cleanedSn = cleaned
                             }
                         ))
                         .autocapitalization(.allCharacters)
@@ -317,10 +522,23 @@ struct ContentView: View {
                             Button(action: {
                                 rawScannedSn = ""
                                 cleanedSn = ""
+                                warrantyResults.removeAll()
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.gray)
                             }
+                        }
+
+                        Button(action: {
+                            triggerDirectWarrantyCheck(sn: cleanedSn)
+                        }) {
+                            Text("Tra Cứu")
+                                .bold()
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
                         }
                     }
                     .padding(12)
@@ -329,13 +547,26 @@ struct ContentView: View {
                 }
                 .padding(.horizontal)
 
-                // Cleaned S/N Result Card
-                if !cleanedSn.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                // Loading Indicator for Warranty Check
+                if isCheckingWarranty {
+                    HStack {
+                        Spacer()
+                        ProgressView().padding(.trailing, 8)
+                        Text("Đang tra cứu dữ liệu bảo hành API...")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                        Spacer()
+                    }
+                    .padding(.vertical, 16)
+                }
+
+                // Cleaned S/N & Warranty Result Display
+                if !cleanedSn.isEmpty && !isCheckingWarranty {
+                    VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundColor(.green)
-                            Text("Số S/N Đã Chuẩn Hóa:")
+                            Text("S/N Đã Chuẩn Hóa:")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -345,66 +576,36 @@ struct ContentView: View {
                             .font(.system(size: 22, weight: .bold, design: .monospaced))
                             .foregroundColor(.blue)
 
-                        Text("Đã tự động lọc phần thừa (prefix/suffix/space).")
-                            .font(.caption2)
-                            .foregroundColor(.gray)
+                        if warrantyResults.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.title)
+                                    .foregroundColor(.orange)
+                                Text("Chưa tìm thấy bản ghi bảo hành cho S/N: \(cleanedSn)")
+                                    .font(.subheadline)
+                                    .multilineTextAlignment(.center)
+                                    .foregroundColor(.secondary)
+                                Text("Có thể camera chưa kích hoạt bảo hành điện tử DSS hoặc thuộc nhà phân phối khác.")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                        } else {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Kết Quả Tra Cứu Direct API (\(warrantyResults.count) Bản Ghi):")
+                                    .font(.headline)
+
+                                ForEach(warrantyResults) { res in
+                                    WarrantyDetailCard(item: res)
+                                }
+                            }
+                        }
                     }
-                    .padding(14)
-                    .background(Color.blue.opacity(0.08))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                    )
+                    .padding(16)
+                    .background(Color(UIColor.secondarySystemBackground))
                     .cornerRadius(12)
                     .padding(.horizontal)
-
-                    // Distributor Check Actions
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Chọn Nhà Phân Phối Tra Cứu Bảo Hành:")
-                            .font(.headline)
-                            .padding(.horizontal)
-
-                        // 1. DSS Việt Nam
-                        DistributorCard(
-                            name: "DSS Việt Nam",
-                            subtitle: "Nhà phân phối Dahua & Imou chính hãng",
-                            iconName: "shield.checkerboard",
-                            color: .red
-                        ) {
-                            openUrl("https://dsssecurity.vn/check-bao-hanh?sn=\(cleanedSn)")
-                        }
-
-                        // 2. KBVISION / ADNT
-                        DistributorCard(
-                            name: "KBVISION Việt Nam / ADNT",
-                            subtitle: "Nhà phân phối KBVision & Dahua",
-                            iconName: "checkmark.shield.fill",
-                            color: .blue
-                        ) {
-                            openUrl("https://kbvision.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)")
-                        }
-
-                        // 3. KBT Việt Nam
-                        DistributorCard(
-                            name: "KBT Việt Nam",
-                            subtitle: "Nhà phân phối thiết bị an ninh KBT",
-                            iconName: "building.2.fill",
-                            color: .orange
-                        ) {
-                            openUrl("https://kbt.net.vn/tra-cuu-bao-hanh/?sn=\(cleanedSn)")
-                        }
-
-                        // 4. Tra Cứu Google Dahua/Imou
-                        DistributorCard(
-                            name: "Tra Cứu Google / Tổng Hợp",
-                            subtitle: "Tìm thông tin S/N \(cleanedSn) trên hệ thống",
-                            iconName: "magnifyingglass",
-                            color: .green
-                        ) {
-                            let query = "check bao hanh dahua imou \(cleanedSn)".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? cleanedSn
-                            openUrl("https://www.google.com/search?q=\(query)")
-                        }
-                    }
                 }
 
                 // Quick Scan LAN Button inside Warranty View
@@ -439,9 +640,18 @@ struct ContentView: View {
         }
     }
 
-    private func openUrl(_ urlString: String) {
-        if let url = URL(string: urlString) {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    private func triggerDirectWarrantyCheck(sn: String) {
+        let clean = cleanSerialNumber(sn)
+        guard !clean.isEmpty else { return }
+        isCheckingWarranty = true
+        warrantyResults.removeAll()
+        warrantyCheckError = nil
+
+        warrantyClient.checkWarranty(sn: clean) { results in
+            DispatchQueue.main.async {
+                self.isCheckingWarranty = false
+                self.warrantyResults = results
+            }
         }
     }
 
@@ -561,9 +771,11 @@ struct ContentView: View {
                                 }
                                 Spacer()
                                 Button("Check S/N") {
+                                    let cleaned = self.cleanSerialNumber(dev.sn)
                                     self.rawScannedSn = dev.sn
-                                    self.cleanedSn = self.cleanSerialNumber(dev.sn)
+                                    self.cleanedSn = cleaned
                                     self.selectedTab = 2
+                                    self.triggerDirectWarrantyCheck(sn: cleaned)
                                 }
                                 .font(.caption)
                                 .padding(.horizontal, 10)
@@ -759,7 +971,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Dahua & Imou Manager")
                             .font(.headline)
-                        Text("Phiên bản 1.0.0 (Check Bảo Hành & Free DDNS)")
+                        Text("Phiên bản 1.0.0 (Check Bảo Hành API & Free DDNS)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -808,9 +1020,9 @@ struct ContentView: View {
                 }
 
                 HStack {
-                    Text("Server Free DDNS")
+                    Text("API Tra Cứu Bảo Hành")
                     Spacer()
-                    Text("fastddns.net / cameraddns")
+                    Text("DSS Việt Nam & Dahua Global")
                         .foregroundColor(.secondary)
                 }
 
@@ -1066,44 +1278,85 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Distributor Card Component
-struct DistributorCard: View {
-    let name: String
-    let subtitle: String
-    let iconName: String
-    let color: Color
-    let action: () -> Void
+// MARK: - Warranty Detail Card Component
+struct WarrantyDetailCard: View {
+    let item: WarrantyResultItem
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Image(systemName: iconName)
-                    .font(.title2)
-                    .foregroundColor(color)
-                    .frame(width: 44, height: 44)
-                    .background(color.opacity(0.12))
-                    .cornerRadius(10)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(item.supplier.uppercased())
+                    .font(.caption)
+                    .bold()
+                    .foregroundColor(.blue)
 
                 Spacer()
 
-                Image(systemName: "chevron.right")
-                    .font(.caption)
+                if !item.isProductOnly {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(item.isValid ? Color.green : Color.red)
+                            .frame(width: 8, height: 8)
+                        Text(item.isValid ? "Còn bảo hành" : "Hết bảo hành")
+                            .font(.caption2)
+                            .bold()
+                            .foregroundColor(item.isValid ? .green : .red)
+                    }
+                }
+            }
+            .padding(.bottom, 2)
+
+            if !item.productName.isEmpty {
+                Text("Tên SP: \(item.productName)")
+                    .font(.headline)
+            }
+
+            if !item.productCode.isEmpty {
+                Text("Mã SP: \(item.productCode)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+
+            if !item.expireDate.isEmpty {
+                HStack {
+                    Text("Hạn bảo hành:")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text(item.expireDate)
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(item.isValid ? .green : .red)
+                }
+            }
+
+            if let remDays = item.remainingDays {
+                HStack {
+                    Text("Thời gian còn lại:")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                    Text(remDays > 0 ? "\(remDays) ngày" : "Đã hết hạn (\(abs(remDays)) ngày)")
+                        .font(.caption)
+                        .bold()
+                        .foregroundColor(remDays > 0 ? .green : .red)
+                }
+            }
+
+            if !item.dealer.isEmpty {
+                Text("Đại lý / NPP: \(item.dealer)")
+                    .font(.caption2)
                     .foregroundColor(.gray)
             }
-            .padding(12)
-            .background(Color(UIColor.secondarySystemBackground))
-            .cornerRadius(12)
+
+            if !item.warehouse.isEmpty {
+                Text("Kho hàng: \(item.warehouse)")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
         }
-        .padding(.horizontal)
+        .padding(14)
+        .background(Color(UIColor.systemBackground))
+        .cornerRadius(10)
+        .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 1)
     }
 }
 
