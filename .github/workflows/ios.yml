@@ -28,7 +28,7 @@ jobs:
           echo "Found project directory at: $PROJ_DIR"
           cd "$PROJ_DIR"
 
-          # Ensure swift files exist in build directory
+          # Ensure swift files exist in current directory and DahuaFreeDDNSiOS subfolder
           mkdir -p DahuaFreeDDNSiOS
           for file in DahuaFreeDDNSApp.swift ContentView.swift DahuaCgiClient.swift; do
             FOUND_FILE=$(find . -name "$file" -type f | head -n 1)
@@ -38,7 +38,12 @@ jobs:
             fi
           done
 
-          # Run xcodebuild
+          echo "=== Directory contents before build ==="
+          ls -la
+          ls -la DahuaFreeDDNSiOS || true
+
+          # Run xcodebuild and capture full log if error occurs
+          set +e
           xcodebuild -project DahuaFreeDDNSiOS.xcodeproj \
                      -target DahuaFreeDDNSiOS \
                      -configuration Release \
@@ -47,7 +52,15 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGNING_REQUIRED=NO \
-                     AD_HOC_CODE_SIGNING_ALLOWED=YES
+                     AD_HOC_CODE_SIGNING_ALLOWED=YES > xcodebuild.log 2>&1
+          
+          BUILD_STATUS=$?
+          cat xcodebuild.log
+
+          if [ $BUILD_STATUS -ne 0 ]; then
+            echo "xcodebuild failed with exit code $BUILD_STATUS"
+            exit $BUILD_STATUS
+          fi
 
           mkdir -p Payload
           APP_PATH=$(find build -name "*.app" -type d | head -n 1)
