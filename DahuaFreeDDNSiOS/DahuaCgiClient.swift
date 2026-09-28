@@ -10,9 +10,19 @@ struct CgiResult {
 
 struct PortScanResult: Identifiable {
     let id = UUID()
+    let host: String
     let port: Int
     let service: String
+    let protocolName: String
     let isOpen: Bool
+
+    init(port: Int, service: String, isOpen: Bool, host: String = "", protocolName: String = "tcp") {
+        self.host = host
+        self.port = port
+        self.service = service
+        self.protocolName = protocolName
+        self.isOpen = isOpen
+    }
 }
 
 class DahuaCgiClient {
@@ -180,24 +190,68 @@ class DahuaCgiClient {
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
 
+    // MARK: - WAN IP Detection
+    func getWanIp(completion: @escaping (String?) -> Void) {
+        let endpoints = [
+            "https://api.ipify.org?format=json",
+            "https://icanhazip.com",
+            "https://ifconfig.me/ip"
+        ]
+
+        func queryNext(idx: Int) {
+            guard idx < endpoints.count, let url = URL(string: endpoints[idx]) else {
+                completion(nil)
+                return
+            }
+
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 3.0
+            session.dataTask(with: req) { data, response, error in
+                if let data = data, let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    if text.contains("{") {
+                        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                           let ip = obj["ip"] as? String {
+                            completion(ip.trimmingCharacters(in: .whitespacesAndNewlines))
+                            return
+                        }
+                    } else if !text.isEmpty && text.count <= 45 && text.components(separatedBy: ".").count >= 3 {
+                        completion(text)
+                        return
+                    }
+                }
+                queryNext(idx: idx + 1)
+            }.resume()
+        }
+
+        queryNext(idx: 0)
+    }
+
     // MARK: - Port Checker Engine
     func checkPorts(
         host: String,
         ports: [Int] = [80, 443, 554, 37777, 37778, 8000, 8080, 23, 5000, 34567],
-        timeoutSec: Double = 1.2,
+        timeoutSec: Double = 1.5,
         completion: @escaping ([PortScanResult]) -> Void
     ) {
-        let serviceNames: [Int: String] = [
-            80: "HTTP Web Quản lý",
-            443: "HTTPS Web (SSL)",
-            554: "RTSP Luồng Video",
-            37777: "Dahua NetSDK TCP",
-            37778: "Dahua DHDiscover UDP",
-            8000: "Hikvision Private Port",
-            8080: "Alternative HTTP",
-            34567: "Xiongmai (XM) Port",
-            23: "Telnet Shell",
-            5000: "UPnP / ONVIF Media"
+        let serviceNames: [Int: (String, String)] = [
+            80: ("HTTP Web Quản lý", "http"),
+            8080: ("HTTP Web (Dự phòng)", "http"),
+            443: ("HTTPS Web Bảo mật", "https"),
+            554: ("RTSP Luồng Video", "rtsp"),
+            37777: ("Dahua TCP (NetSDK)", "dahua"),
+            37778: ("Dahua UDP", "dahua"),
+            8000: ("Hikvision Server Port", "hikvision"),
+            8200: ("Hikvision Data Port", "hikvision"),
+            34567: ("Xiongmai (XM) Net Port", "xiongmai"),
+            21: ("FTP", "ftp"),
+            22: ("SSH", "ssh"),
+            23: ("Telnet Shell", "telnet"),
+            53: ("DNS", "dns"),
+            123: ("NTP Đồng bộ giờ", "ntp"),
+            161: ("SNMP", "snmp"),
+            1935: ("RTMP Stream", "rtmp"),
+            5000: ("UPnP / ONVIF Media", "onvif"),
+            8899: ("ONVIF Service", "onvif")
         ]
 
         let cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,10 +267,13 @@ class DahuaCgiClient {
             group.enter()
             DispatchQueue.global(qos: .userInitiated).async {
                 let isOpen = self.probeTcpPort(host: cleanHost, port: p, timeoutSec: timeoutSec)
+                let srv = serviceNames[p] ?? ("Dịch vụ TCP", "tcp")
                 let res = PortScanResult(
                     port: p,
-                    service: serviceNames[p] ?? "Dịch vụ TCP",
-                    isOpen: isOpen
+                    service: srv.0,
+                    isOpen: isOpen,
+                    host: cleanHost,
+                    protocolName: srv.1
                 )
                 lock.lock()
                 results.append(res)

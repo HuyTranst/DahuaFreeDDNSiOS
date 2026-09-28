@@ -279,11 +279,34 @@ struct ContentView: View {
 
     private let cgiClient = DahuaCgiClient()
     private let warrantyClient = DahuaWarrantyClient()
-    // Check Port State
-    @State private var checkPortHost: String = "192.168.1.108"
-    @State private var customPortsSpec: String = "80, 443, 554, 37777, 8000, 8080, 23, 5000, 37778, 34567"
+
+    // Check Port State (Enhanced matching UI)
+    @State private var currentWanIp: String = "Đang tải..."
+    @State private var isLoadingWanIp: Bool = false
+    @State private var selectedLanDeviceForPort: String = ""
+    @State private var checkPortHost: String = ""
+    @State private var cpPort1: String = "37777"
+    @State private var cpPort2: String = "80"
+    @State private var cpPort3: String = "554"
+    @State private var cpPort4: String = "8000"
     @State private var isCheckingPorts: Bool = false
     @State private var portScanResults: [PortScanResult] = []
+    @State private var hasCheckedPorts: Bool = false
+
+    // QR Code Generator State (Enhanced matching UI)
+    @State private var qrMode: Int = 0 // 0: Theo mẫu thiết bị, 1: Tùy chỉnh
+    @State private var qrBrand: String = "Imou"
+    @State private var qrModel: String = "IPC-A22EP"
+    @State private var qrSn: String = ""
+    @State private var qrSafetyCode: String = ""
+    @State private var qrEncodingFormat: Int = 0 // 0: S/N chuẩn, 1: Cặp {S/N, Safety Code}
+    @State private var qrCustomText: String = ""
+    @State private var selectedLanDeviceForQr: String = ""
+    @State private var generatedQrPayload: String = ""
+    @State private var generatedQrImage: UIImage? = nil
+    @State private var isQrGenerated: Bool = false
+    @State private var showShareSheet: Bool = false
+    @State private var qrCopiedToast: Bool = false
 
     // Date & NTP State
     @State private var selectedDate: Date = Date()
@@ -318,7 +341,7 @@ struct ContentView: View {
         case setDateNtp
         case checkPort
         case superPassword
-        case qrCodeSN(String)
+        case qrCodeGenerator(initialSn: String, initialModel: String, initialBrand: String)
 
         var id: String {
             switch self {
@@ -329,7 +352,7 @@ struct ContentView: View {
             case .setDateNtp: return "setDateNtp"
             case .checkPort: return "checkPort"
             case .superPassword: return "superPassword"
-            case .qrCodeSN(let sn): return "qrCodeSN_\(sn)"
+            case .qrCodeGenerator(let sn, _, _): return "qrCodeGenerator_\(sn)"
             }
         }
     }
@@ -451,9 +474,9 @@ struct ContentView: View {
                             self.activeModalType = .checkPort
                         }
                     },
-                    .default(Text("📱 Tạo mã QR Code từ S/N")) {
+                    .default(Text("📱 Tạo mã QR Code Cài Đặt (S/N)")) {
                         if let dev = activeDevice {
-                            self.activeModalType = .qrCodeSN(dev.sn.isEmpty ? dev.ip : dev.sn)
+                            self.openQrCodeModal(for: dev)
                         }
                     },
                     .default(Text("🔍 Check Bảo Hành S/N")) {
@@ -522,15 +545,7 @@ struct ContentView: View {
                         }
                 }
             case .checkPort:
-                NavigationView {
-                    checkPortView
-                        .navigationTitle("Check Port (\(checkPortHost))")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Đóng") { activeModalType = nil }
-                            }
-                        }
-                }
+                checkPortModalView
             case .superPassword:
                 NavigationView {
                     superPasswordView
@@ -541,15 +556,8 @@ struct ContentView: View {
                             }
                         }
                 }
-            case .qrCodeSN(let snText):
-                NavigationView {
-                    QRCodeView(text: snText)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Đóng") { activeModalType = nil }
-                            }
-                        }
-                }
+            case .qrCodeGenerator:
+                qrCodeGeneratorModalView
             }
         }
     }
@@ -834,7 +842,7 @@ struct ContentView: View {
                             self.activeModalType = .superPassword
                         }
                         QuickTile(title: "Tạo QR S/N", icon: "qrcode", color: .orange) {
-                            self.activeModalType = .qrCodeSN("SN-SAMPLE-123456")
+                            self.openQrCodeModal(for: nil)
                         }
                     }
                     .padding(.horizontal)
@@ -1243,74 +1251,526 @@ struct ContentView: View {
         }
     }
 
-    // Modal View: Check Port
-    var checkPortView: some View {
-        Form {
-            Section(header: Text("Cấu hình IP / Tên miền kiểm tra")) {
-                HStack {
-                    Text("IP / Domain")
-                    Spacer()
-                    TextField("192.168.1.108", text: $checkPortHost)
-                        .multilineTextAlignment(.trailing)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                }
+    // MARK: - Modal View: Check Port (Matching Screenshot 1)
+    var checkPortModalView: some View {
+        NavigationView {
+            ZStack {
+                Color(red: 0.05, green: 0.07, blue: 0.12).edgesIgnoringSafeArea(.all)
 
-                HStack {
-                    Text("Danh sách Port")
-                    Spacer()
-                    TextField("80, 443, 554, 37777...", text: $customPortsSpec)
-                        .multilineTextAlignment(.trailing)
-                }
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // 1. Top Banner: WAN IP Public
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .center) {
+                                Image(systemName: "globe")
+                                    .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+                                    .font(.title3)
 
-                Button(action: executeCheckPorts) {
-                    HStack {
-                        Spacer()
-                        if isCheckingPorts {
-                            ProgressView().padding(.trailing, 8)
-                            Text("ĐANG CHECK PORT...")
-                                .bold()
-                        } else {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
-                            Text("BẮT ĐẦU KIỂM TRA CỔNG PORT")
-                                .bold()
-                        }
-                        Spacer()
-                    }
-                    .padding(.vertical, 6)
-                    .background(isCheckingPorts ? Color.gray : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                }
-                .disabled(isCheckingPorts)
-            }
+                                Text("Địa chỉ IP WAN công cộng của bạn:")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white)
 
-            if !portScanResults.isEmpty {
-                Section(header: Text("Kết quả Check Port (\(portScanResults.filter { $0.isOpen }.count)/\(portScanResults.count) Mở)")) {
-                    ForEach(portScanResults) { res in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Port \(res.port)")
-                                    .font(.headline)
-                                Text(res.service)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                                Text(currentWanIp)
+                                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                                    .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+
+                                Spacer()
+
+                                Button(action: fetchWanIp) {
+                                    HStack(spacing: 4) {
+                                        if isLoadingWanIp {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                .scaleEffect(0.8)
+                                        } else {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.caption)
+                                        }
+                                        Text("Tải lại WAN IP")
+                                            .font(.caption)
+                                            .bold()
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color(red: 0.08, green: 0.38, blue: 0.58))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(6)
+                                }
+
+                                Button(action: fillWanIp) {
+                                    Text("Điền IP WAN")
+                                        .font(.caption)
+                                        .bold()
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color(red: 0.06, green: 0.65, blue: 0.45))
+                                        .foregroundColor(.white)
+                                        .cornerRadius(6)
+                                }
                             }
-                            Spacer()
-                            Text(res.isOpen ? "OPEN (MỞ)" : "CLOSED (ĐÓNG)")
-                                .font(.caption)
-                                .bold()
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(res.isOpen ? Color.green : Color.red.opacity(0.8))
-                                .foregroundColor(.white)
-                                .cornerRadius(6)
                         }
+                        .padding(14)
+                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.14, green: 0.25, blue: 0.38), lineWidth: 1)
+                        )
+
+                        // 2. Target IP / Domain & LAN device selection
+                        VStack(spacing: 12) {
+                            HStack(spacing: 12) {
+                                // LAN Device Dropdown
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Hoặc chọn thiết bị từ mạng LAN:")
+                                        .font(.caption)
+                                        .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+
+                                    Menu {
+                                        Button("-- [Tự do nhập IP/WAN] hoặc Chọn thiết bị --") {
+                                            selectedLanDeviceForPort = ""
+                                        }
+                                        ForEach(scanner.discoveredDevices) { dev in
+                                            Button("\(dev.ip) - \(dev.brand.rawValue) (\(dev.model.isEmpty ? dev.mac : dev.model))") {
+                                                selectedLanDeviceForPort = dev.ip
+                                                checkPortHost = dev.ip
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(selectedLanDeviceForPort.isEmpty ? "-- [Tự do nhập IP/WAN] hoặc Chọn thiết bị --" : selectedLanDeviceForPort)
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                                .lineLimit(1)
+                                            Spacer()
+                                            Image(systemName: "chevron.down")
+                                                .font(.caption2)
+                                                .foregroundColor(.gray)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 10)
+                                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                        .cornerRadius(6)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1)
+                                        )
+                                    }
+                                }
+
+                                // Target Host Input
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text("*")
+                                            .foregroundColor(.cyan)
+                                        Text("Địa chỉ IP / Tên miền kiểm tra:")
+                                            .font(.caption)
+                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+                                    }
+
+                                    HStack {
+                                        TextField("VD: 27.64.170.126 hoặc domain.ddns", text: $checkPortHost)
+                                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white)
+                                            .autocapitalization(.none)
+                                            .disableAutocorrection(true)
+
+                                        if !checkPortHost.isEmpty {
+                                            Button(action: { checkPortHost = "" }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .foregroundColor(.gray)
+                                            }
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 9)
+                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1)
+                                    )
+                                }
+                            }
+                        }
+                        .padding(14)
+                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
+                        )
+
+                        // 3. Ports Input Cards (Ports 1 to 4)
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("CÁC CỔNG CẦN KIỂM TRA (PORTS):")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text("Gợi ý các cổng camera phổ biến")
+                                    .font(.caption2)
+                                    .foregroundColor(.gray)
+                            }
+
+                            // 4 Port Cards Row
+                            HStack(spacing: 8) {
+                                PortCardItem(label: "Cổng 1 (Dahua TCP)", text: $cpPort1)
+                                PortCardItem(label: "Cổng 2 (HTTP Web)", text: $cpPort2)
+                                PortCardItem(label: "Cổng 3 (RTSP Stream)", text: $cpPort3)
+                                PortCardItem(label: "Cổng 4 (Hikvision SDK)", text: $cpPort4)
+                            }
+
+                            // Preset Pills Row
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    Button(action: {
+                                        cpPort1 = "37777"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = ""
+                                    }) {
+                                        Text("⭐ Bộ Dahua (37777, 80, 554)")
+                                            .font(.caption2)
+                                            .bold()
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color(red: 0.09, green: 0.22, blue: 0.36))
+                                            .foregroundColor(.cyan)
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.cyan.opacity(0.4), lineWidth: 1))
+                                    }
+
+                                    Button(action: {
+                                        cpPort1 = "8000"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = "443"
+                                    }) {
+                                        Text("⭐ Bộ Hikvision (8000, 80, 554, 443)")
+                                            .font(.caption2)
+                                            .bold()
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color(red: 0.28, green: 0.2, blue: 0.08))
+                                            .foregroundColor(.orange)
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.4), lineWidth: 1))
+                                    }
+
+                                    Button(action: {
+                                        cpPort1 = "34567"; cpPort2 = "80"; cpPort3 = "554"; cpPort4 = ""
+                                    }) {
+                                        Text("⭐ Bộ Xiongmai / XM (34567, 80, 554)")
+                                            .font(.caption2)
+                                            .bold()
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color(red: 0.22, green: 0.12, blue: 0.32))
+                                            .foregroundColor(Color(red: 0.8, green: 0.5, blue: 0.95))
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.purple.opacity(0.4), lineWidth: 1))
+                                    }
+
+                                    Button(action: {
+                                        cpPort1 = "80"; cpPort2 = "443"; cpPort3 = "8080"; cpPort4 = ""
+                                    }) {
+                                        Text("Web Ports (80, 443, 8080)")
+                                            .font(.caption2)
+                                            .bold()
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color(red: 0.12, green: 0.16, blue: 0.24))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.4), lineWidth: 1))
+                                    }
+                                }
+                            }
+                        }
+                        .padding(14)
+                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
+                        )
+
+                        // 4. Main Check Button
+                        Button(action: executeCheckPorts) {
+                            HStack {
+                                Spacer()
+                                if isCheckingPorts {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .padding(.trailing, 8)
+                                    Text("Đang kiểm tra...")
+                                        .font(.headline)
+                                        .bold()
+                                } else {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.headline)
+                                    Text("Kiểm Tra Cổng")
+                                        .font(.headline)
+                                        .bold()
+                                }
+                                Spacer()
+                            }
+                            .frame(height: 48)
+                            .background(Color(red: 0.06, green: 0.65, blue: 0.45))
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                            .shadow(color: Color(red: 0.06, green: 0.65, blue: 0.45).opacity(0.3), radius: 6, x: 0, y: 3)
+                        }
+                        .disabled(isCheckingPorts)
+
+                        // 5. Results Table Section
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("Kết quả kiểm tra cổng mở:")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.white)
+
+                                Spacer()
+
+                                if hasCheckedPorts {
+                                    let openCount = portScanResults.filter { $0.isOpen }.count
+                                    if openCount > 0 {
+                                        Text("🟢 Có \(openCount) / \(portScanResults.count) cổng MỞ")
+                                            .font(.caption)
+                                            .bold()
+                                            .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+                                    } else {
+                                        Text("🔴 0 / \(portScanResults.count) cổng Mở (Tất cả ĐÓNG)")
+                                            .font(.caption)
+                                            .bold()
+                                            .foregroundColor(Color(red: 0.95, green: 0.35, blue: 0.35))
+                                    }
+                                }
+                            }
+
+                            // Table Header
+                            HStack {
+                                Text("IP / Tên miền")
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(.gray)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text("Cổng")
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(.gray)
+                                    .frame(width: 50, alignment: .center)
+                                Text("Dịch vụ")
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(.gray)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text("Trạng thái")
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(.gray)
+                                    .frame(width: 85, alignment: .center)
+                                Text("Truy cập nhanh")
+                                    .font(.caption2)
+                                    .bold()
+                                    .foregroundColor(.gray)
+                                    .frame(width: 80, alignment: .trailing)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color(red: 0.06, green: 0.09, blue: 0.15))
+                            .cornerRadius(6)
+
+                            if portScanResults.isEmpty {
+                                HStack {
+                                    Spacer()
+                                    Text(hasCheckedPorts ? "Không tìm thấy cổng nào." : "Nhập IP / Port và bấm [Kiểm Tra Cổng] để xem kết quả.")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                        .padding(.vertical, 16)
+                                    Spacer()
+                                }
+                            } else {
+                                ForEach(portScanResults) { res in
+                                    HStack {
+                                        Text(res.host)
+                                            .font(.caption2)
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        Text("\(res.port)")
+                                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                                            .foregroundColor(Color(red: 0.4, green: 0.8, blue: 1.0))
+                                            .frame(width: 50, alignment: .center)
+
+                                        Text(res.service)
+                                            .font(.caption2)
+                                            .foregroundColor(Color(red: 0.8, green: 0.85, blue: 0.95))
+                                            .lineLimit(1)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        if res.isOpen {
+                                            Text("🟢 Mở (Open)")
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 3)
+                                                .background(Color(red: 0.2, green: 0.83, blue: 0.6).opacity(0.15))
+                                                .cornerRadius(4)
+                                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(red: 0.2, green: 0.83, blue: 0.6).opacity(0.4), lineWidth: 1))
+                                                .frame(width: 85, alignment: .center)
+                                        } else {
+                                            Text("🔴 Đóng (Closed)")
+                                                .font(.system(size: 10, weight: .semibold))
+                                                .foregroundColor(Color(red: 0.95, green: 0.4, blue: 0.4))
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 3)
+                                                .background(Color(red: 0.95, green: 0.4, blue: 0.4).opacity(0.12))
+                                                .cornerRadius(4)
+                                                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(red: 0.95, green: 0.4, blue: 0.4).opacity(0.3), lineWidth: 1))
+                                                .frame(width: 85, alignment: .center)
+                                        }
+
+                                        // Quick Action Button
+                                        if res.isOpen {
+                                            if res.port == 80 || res.port == 8080 {
+                                                Button(action: {
+                                                    if let url = URL(string: "http://\(res.host):\(res.port)") {
+                                                        UIApplication.shared.open(url)
+                                                    }
+                                                }) {
+                                                    Text("🌐 Mở Web")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 3)
+                                                        .background(Color.blue)
+                                                        .foregroundColor(.white)
+                                                        .cornerRadius(4)
+                                                }
+                                                .frame(width: 80, alignment: .trailing)
+                                            } else if res.port == 443 {
+                                                Button(action: {
+                                                    if let url = URL(string: "https://\(res.host):\(res.port)") {
+                                                        UIApplication.shared.open(url)
+                                                    }
+                                                }) {
+                                                    Text("🔒 Mở Web")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 3)
+                                                        .background(Color.blue)
+                                                        .foregroundColor(.white)
+                                                        .cornerRadius(4)
+                                                }
+                                                .frame(width: 80, alignment: .trailing)
+                                            } else if res.port == 554 {
+                                                Button(action: {
+                                                    let rtspUrl = "rtsp://admin:admin123@\(res.host):\(res.port)/cam/realmonitor?channel=1&subtype=0"
+                                                    UIPasteboard.general.string = rtspUrl
+                                                }) {
+                                                    Text("📺 RTSP")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .padding(.horizontal, 6)
+                                                        .padding(.vertical, 3)
+                                                        .background(Color.orange)
+                                                        .foregroundColor(.white)
+                                                        .cornerRadius(4)
+                                                }
+                                                .frame(width: 80, alignment: .trailing)
+                                            } else {
+                                                Text("Sẵn sàng")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+                                                    .frame(width: 80, alignment: .trailing)
+                                            }
+                                        } else {
+                                            Text("-")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                                .frame(width: 80, alignment: .trailing)
+                                        }
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color(red: 0.08, green: 0.12, blue: 0.19))
+                                    .cornerRadius(6)
+                                }
+                            }
+                        }
+                        .padding(14)
+                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
+                        )
+
+                        // Bottom Close Button
+                        HStack {
+                            Spacer()
+                            Button(action: { activeModalType = nil }) {
+                                Text("Đóng")
+                                    .font(.subheadline)
+                                    .bold()
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 8)
+                                    .background(Color(red: 0.12, green: 0.16, blue: 0.24))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding()
+                }
+            }
+            .navigationBarTitle("Kiểm Tra Cổng Mở (Port Checker) WAN / LAN / Tên Miền", displayMode: .inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: { activeModalType = nil }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .onAppear {
+                if currentWanIp == "Đang tải..." {
+                    fetchWanIp()
+                }
+                if checkPortHost.isEmpty {
+                    if let dev = activeDevice {
+                        checkPortHost = dev.ip
+                    } else if currentWanIp != "Đang tải..." && currentWanIp != "Không thể lấy IP" {
+                        checkPortHost = currentWanIp
                     }
                 }
             }
         }
     }
+
+    private func fillWanIp() {
+        if currentWanIp != "Đang tải..." && currentWanIp != "Không thể lấy IP" {
+            checkPortHost = currentWanIp
+        } else {
+            fetchWanIp()
+        }
+    }
+
+    private func fetchWanIp() {
+        isLoadingWanIp = true
+        currentWanIp = "Đang tải..."
+        cgiClient.getWanIp { ip in
+            DispatchQueue.main.async {
+                self.isLoadingWanIp = false
+                if let ip = ip, !ip.isEmpty {
+                    self.currentWanIp = ip
+                    if self.checkPortHost.isEmpty {
+                        self.checkPortHost = ip
+                    }
+                } else {
+                    self.currentWanIp = "Không thể lấy IP"
+                }
+            }
+        }
+    }
+
 
     // Modal View: Super Password
     var superPasswordView: some View {
@@ -1643,16 +2103,29 @@ struct ContentView: View {
     }
 
     private func executeCheckPorts() {
+        var target = checkPortHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        if target.isEmpty {
+            target = currentWanIp != "Đang tải..." && currentWanIp != "Không thể lấy IP" ? currentWanIp : "192.168.1.108"
+            checkPortHost = target
+        }
+
+        var portsToCheck: [Int] = []
+        for pStr in [cpPort1, cpPort2, cpPort3, cpPort4] {
+            let clean = pStr.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let val = Int(clean), (1...65535).contains(val), !portsToCheck.contains(val) {
+                portsToCheck.append(val)
+            }
+        }
+
+        if portsToCheck.isEmpty {
+            portsToCheck = [37777, 80, 554]
+        }
+
         isCheckingPorts = true
+        hasCheckedPorts = true
         portScanResults.removeAll()
 
-        let portList = customPortsSpec.components(separatedBy: CharacterSet(charactersIn: ",; "))
-            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-            .filter { (1...65535).contains($0) }
-
-        let finalPorts = portList.isEmpty ? [80, 443, 554, 37777, 8000, 8080, 23, 5000, 37778, 34567] : portList
-
-        cgiClient.checkPorts(host: checkPortHost, ports: finalPorts) { results in
+        cgiClient.checkPorts(host: target, ports: portsToCheck) { results in
             DispatchQueue.main.async {
                 self.isCheckingPorts = false
                 self.portScanResults = results
@@ -1778,6 +2251,502 @@ struct ContentView: View {
         let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         self.logHistory += "[\(timestamp)] \(msg)\n"
     }
+
+    func openQrCodeModal(for device: CameraDevice?) {
+        if let dev = device {
+            qrBrand = dev.brand.rawValue
+            qrModel = dev.model.isEmpty ? "IPC-A22EP" : dev.model
+            qrSn = dev.sn
+            qrSafetyCode = ""
+            qrMode = 0
+            qrEncodingFormat = 0
+            generateQrPayloadAndImage()
+            activeModalType = .qrCodeGenerator(initialSn: dev.sn, initialModel: dev.model, initialBrand: dev.brand.rawValue)
+        } else {
+            qrBrand = "Imou"
+            qrModel = "IPC-A22EP"
+            qrSn = ""
+            qrSafetyCode = ""
+            qrMode = 0
+            qrEncodingFormat = 0
+            isQrGenerated = false
+            generatedQrImage = nil
+            activeModalType = .qrCodeGenerator(initialSn: "", initialModel: "", initialBrand: "Imou")
+        }
+    }
+
+    func generateQrPayloadAndImage() {
+        if qrMode == 0 {
+            let cleanSn = qrSn.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            let cleanSc = qrSafetyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+            if qrEncodingFormat == 1 && !cleanSc.isEmpty {
+                generatedQrPayload = "\(cleanSn),\(cleanSc)"
+            } else {
+                generatedQrPayload = cleanSn
+            }
+        } else {
+            generatedQrPayload = qrCustomText.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if !generatedQrPayload.isEmpty {
+            generatedQrImage = generateQRCodeImage(from: generatedQrPayload)
+            isQrGenerated = true
+        } else {
+            generatedQrImage = nil
+            isQrGenerated = false
+        }
+    }
+
+    // MARK: - Modal View: QR Code Generator (Matching Screenshot 2)
+    var qrCodeGeneratorModalView: some View {
+        NavigationView {
+            ZStack {
+                Color(red: 0.05, green: 0.07, blue: 0.12).edgesIgnoringSafeArea(.all)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // 1. Chế độ tạo QR Code
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("1. CHẾ ĐỘ TẠO QR CODE")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(Color(red: 0.4, green: 0.75, blue: 1.0))
+
+                            HStack(spacing: 12) {
+                                // Option 1: Theo mẫu thiết bị
+                                Button(action: { qrMode = 0 }) {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: qrMode == 0 ? "largecircle.fill.circle" : "circle")
+                                            .foregroundColor(qrMode == 0 ? .cyan : .gray)
+                                            .font(.system(size: 18))
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Tạo theo mẫu thiết bị")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white)
+                                            Text("Brand, Model, S/N, Safety Code")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(qrMode == 0 ? Color.cyan : Color.gray.opacity(0.3), lineWidth: qrMode == 0 ? 2 : 1)
+                                    )
+                                }
+
+                                // Option 2: Tùy chỉnh
+                                Button(action: { qrMode = 1 }) {
+                                    HStack(alignment: .top, spacing: 10) {
+                                        Image(systemName: qrMode == 1 ? "largecircle.fill.circle" : "circle")
+                                            .foregroundColor(qrMode == 1 ? .cyan : .gray)
+                                            .font(.system(size: 18))
+
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Tùy chỉnh (Chỉ tạo S/N hoặc Text)")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white)
+                                            Text("Nội dung văn bản, Serial, URL bất kỳ")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(12)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(qrMode == 1 ? Color.cyan : Color.gray.opacity(0.3), lineWidth: qrMode == 1 ? 2 : 1)
+                                    )
+                                }
+                            }
+
+                            // Quick Fill from LAN Devices
+                            HStack(spacing: 8) {
+                                Image(systemName: "bolt.fill")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+
+                                Text("Nạp nhanh từ thiết bị quét được:")
+                                    .font(.caption)
+                                    .foregroundColor(Color(red: 0.8, green: 0.85, blue: 0.95))
+
+                                Menu {
+                                    Button("-- [Chọn thiết bị để tự động điền Model & S/N] --") {
+                                        selectedLanDeviceForQr = ""
+                                    }
+                                    ForEach(scanner.discoveredDevices) { dev in
+                                        Button("\(dev.ip) - \(dev.brand.rawValue) (\(dev.sn.isEmpty ? dev.mac : dev.sn))") {
+                                            selectedLanDeviceForQr = dev.sn
+                                            qrBrand = dev.brand.rawValue
+                                            if !dev.model.isEmpty { qrModel = dev.model }
+                                            if !dev.sn.isEmpty { qrSn = dev.sn }
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(selectedLanDeviceForQr.isEmpty ? "-- [Chọn thiết bị để tự động điền Model & S/N] --" : selectedLanDeviceForQr)
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 8)
+                                    .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                    .cornerRadius(6)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1)
+                                    )
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(14)
+                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
+                        )
+
+                        // 2. Thông tin thiết bị Camera / Đầu Ghi
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("2. THÔNG TIN THIẾT BỊ CAMERA / ĐẦU GHI")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(Color(red: 0.4, green: 0.75, blue: 1.0))
+
+                            if qrMode == 0 {
+                                // Row 1: Brand & Model
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Thương hiệu (Brand):")
+                                            .font(.caption)
+                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+
+                                        Menu {
+                                            ForEach(["Imou", "Dahua", "KBVision", "Hikvision", "UNV", "Tiandy", "Khác"], id: \.self) { b in
+                                                Button(b) { qrBrand = b }
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text(qrBrand)
+                                                    .font(.subheadline)
+                                                    .bold()
+                                                    .foregroundColor(.white)
+                                                Spacer()
+                                                Image(systemName: "chevron.down")
+                                                    .font(.caption2)
+                                                    .foregroundColor(.gray)
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 10)
+                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Tên thiết bị / Model:")
+                                            .font(.caption)
+                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+
+                                        TextField("IPC-A22EP", text: $qrModel)
+                                            .font(.subheadline)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 9)
+                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+
+                                // Row 2: Serial Number & Safety Code
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text("*")
+                                                .foregroundColor(.cyan)
+                                            Text("Số Serial (S/N):")
+                                                .font(.caption)
+                                                .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+                                        }
+
+                                        TextField("Nhập Serial Number thiết bị...", text: $qrSn)
+                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white)
+                                            .autocapitalization(.allCharacters)
+                                            .disableAutocorrection(true)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 9)
+                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
+                                    }
+                                    .frame(maxWidth: .infinity)
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Safety Code (Mã an toàn đáy cam):")
+                                            .font(.caption)
+                                            .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+
+                                        TextField("VD: L2A8B3 (nếu có)", text: $qrSafetyCode)
+                                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                            .foregroundColor(.white)
+                                            .autocapitalization(.allCharacters)
+                                            .disableAutocorrection(true)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 9)
+                                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                            .cornerRadius(6)
+                                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+
+                                // Encoding Format Selection (Radio Buttons)
+                                HStack(spacing: 20) {
+                                    Button(action: { qrEncodingFormat = 0 }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: qrEncodingFormat == 0 ? "largecircle.fill.circle" : "circle")
+                                                .foregroundColor(qrEncodingFormat == 0 ? .cyan : .gray)
+                                                .font(.caption)
+                                            Text("Mã hóa S/N chuẩn (Quét trực tiếp gán vào App Imou/DMSS/KBONE)")
+                                                .font(.caption2)
+                                                .foregroundColor(qrEncodingFormat == 0 ? .white : .gray)
+                                        }
+                                    }
+
+                                    Button(action: { qrEncodingFormat = 1 }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: qrEncodingFormat == 1 ? "largecircle.fill.circle" : "circle")
+                                                .foregroundColor(qrEncodingFormat == 1 ? .cyan : .gray)
+                                                .font(.caption)
+                                            Text("Mã hóa Cặp {S/N, Safety Code}")
+                                                .font(.caption2)
+                                                .foregroundColor(qrEncodingFormat == 1 ? .white : .gray)
+                                        }
+                                    }
+                                }
+                                .padding(.top, 4)
+
+                            } else {
+                                // Custom Text Mode
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("* Nội dung S/N hoặc Văn bản / URL:")
+                                        .font(.caption)
+                                        .foregroundColor(Color(red: 0.7, green: 0.75, blue: 0.85))
+
+                                    TextField("Nhập chuỗi S/N hoặc URL / văn bản bất kỳ...", text: $qrCustomText)
+                                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 10)
+                                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                                        .cornerRadius(6)
+                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
+                                }
+                            }
+
+                            // Generate Button
+                            HStack {
+                                Spacer()
+                                Button(action: generateQrPayloadAndImage) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "qrcode")
+                                            .font(.headline)
+                                        Text("Tạo QRCode")
+                                            .font(.headline)
+                                            .bold()
+                                    }
+                                    .padding(.horizontal, 28)
+                                    .padding(.vertical, 12)
+                                    .background(Color(red: 0.01, green: 0.52, blue: 0.78))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                                    .shadow(color: Color(red: 0.01, green: 0.52, blue: 0.78).opacity(0.4), radius: 6, x: 0, y: 3)
+                                }
+                                Spacer()
+                            }
+                            .padding(.top, 6)
+                        }
+                        .padding(14)
+                        .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
+                        )
+
+                        // 3. Generated QR Result Card
+                        if isQrGenerated, let qrImg = generatedQrImage {
+                            VStack(spacing: 14) {
+                                // White card container for QR Image
+                                Image(uiImage: qrImg)
+                                    .resizable()
+                                    .interpolation(.none)
+                                    .scaledToFit()
+                                    .frame(width: 220, height: 220)
+                                    .padding(12)
+                                    .background(Color.white)
+                                    .cornerRadius(12)
+                                    .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 4)
+
+                                // Information details
+                                VStack(spacing: 6) {
+                                    if qrMode == 0 {
+                                        HStack {
+                                            Text("Thương hiệu:")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                            Text(qrBrand)
+                                                .font(.caption)
+                                                .bold()
+                                                .foregroundColor(.cyan)
+
+                                            if !qrModel.isEmpty {
+                                                Text("| Model:")
+                                                    .font(.caption)
+                                                    .foregroundColor(.gray)
+                                                Text(qrModel)
+                                                    .font(.caption)
+                                                    .bold()
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+
+                                        HStack {
+                                            Text("S/N: \(qrSn)")
+                                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                                .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+
+                                            if !qrSafetyCode.isEmpty {
+                                                Text("• SC: \(qrSafetyCode)")
+                                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                                    .foregroundColor(.orange)
+                                            }
+                                        }
+                                    } else {
+                                        Text("Nội dung: \(generatedQrPayload)")
+                                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                            .foregroundColor(Color(red: 0.2, green: 0.83, blue: 0.6))
+                                    }
+
+                                    HStack {
+                                        Text("Mã hóa chuỗi:")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                        Text(generatedQrPayload)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.white.opacity(0.08))
+                                            .cornerRadius(4)
+                                    }
+                                }
+
+                                // Action Buttons
+                                HStack(spacing: 12) {
+                                    Button(action: {
+                                        UIPasteboard.general.string = generatedQrPayload
+                                        qrCopiedToast = true
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                            qrCopiedToast = false
+                                        }
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: qrCopiedToast ? "checkmark" : "doc.on.doc")
+                                            Text(qrCopiedToast ? "Đã sao chép!" : "Sao chép chuỗi")
+                                                .font(.caption)
+                                                .bold()
+                                        }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(qrCopiedToast ? Color.green : Color.orange.opacity(0.2))
+                                        .foregroundColor(qrCopiedToast ? .white : .orange)
+                                        .cornerRadius(6)
+                                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.orange.opacity(0.4), lineWidth: 1))
+                                    }
+
+                                    Button(action: { showShareSheet = true }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "square.and.arrow.up")
+                                            Text("Chia sẻ / Lưu ảnh")
+                                                .font(.caption)
+                                                .bold()
+                                        }
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 8)
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(6)
+                                    }
+                                }
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(red: 0.08, green: 0.12, blue: 0.2))
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color(red: 0.14, green: 0.22, blue: 0.35), lineWidth: 1)
+                            )
+                        }
+
+                        // Bottom Close Button
+                        HStack {
+                            Spacer()
+                            Button(action: { activeModalType = nil }) {
+                                Text("Đóng")
+                                    .font(.subheadline)
+                                    .bold()
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 8)
+                                    .background(Color(red: 0.12, green: 0.16, blue: 0.24))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
+                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
+                    .padding()
+                }
+            }
+            .navigationBarTitle("Tạo Mã QR Code Cài Đặt Cho Camera / Đầu Ghi", displayMode: .inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(action: { activeModalType = nil }) {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
+            .sheet(isPresented: $showShareSheet) {
+                if let img = generatedQrImage {
+                    ActivityView(activityItems: [img, generatedQrPayload])
+                }
+            }
+            .onAppear {
+                if !qrSn.isEmpty && generatedQrImage == nil {
+                    generateQrPayloadAndImage()
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Super Password Row Component
@@ -1821,6 +2790,67 @@ struct SuperPassRow: View {
         .background(Color(UIColor.tertiarySystemBackground))
         .cornerRadius(8)
     }
+}
+
+// MARK: - Port Card Item for Check Port View
+struct PortCardItem: View {
+    let label: String
+    @Binding var text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(Color(red: 0.75, green: 0.8, blue: 0.9))
+                .lineLimit(1)
+
+            TextField("Port", text: $text)
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundColor(.black)
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 6)
+                .background(Color.white)
+                .cornerRadius(6)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(Color(red: 0.09, green: 0.13, blue: 0.22))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(red: 0.2, green: 0.28, blue: 0.42), lineWidth: 1))
+    }
+}
+
+// MARK: - ActivityView for Sharing & Saving Images
+struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - High Quality QR Code Generator Helper
+func generateQRCodeImage(from string: String, scale: CGFloat = 10) -> UIImage? {
+    guard let data = string.data(using: .utf8),
+          let filter = CIFilter(name: "CIQRCodeGenerator") else {
+        return nil
+    }
+    filter.setValue(data, forKey: "inputMessage")
+    filter.setValue("H", forKey: "inputCorrectionLevel")
+
+    guard let ciImage = filter.outputImage else { return nil }
+    let transform = CGAffineTransform(scaleX: scale, y: scale)
+    let scaledCiImage = ciImage.transformed(by: transform)
+
+    let context = CIContext()
+    if let cgImage = context.createCGImage(scaledCiImage, from: scaledCiImage.extent) {
+        return UIImage(cgImage: cgImage)
+    }
+    return nil
 }
 
 // MARK: - QR Code Generator View Component
