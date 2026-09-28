@@ -1317,8 +1317,8 @@ struct ContentView: View {
             Section(header: Text("Chọn Ngày Hiển Thị Trên Đầu Ghi Dahua")) {
                 DatePicker("Ngày tra cứu:", selection: $superPassDate, displayedComponents: .date)
                     .datePickerStyle(GraphicalDatePickerStyle())
-                    .onChange(of: superPassDate) { newDate in
-                        calculateSuperPassword(for: newDate)
+                    .onChange(of: superPassDate) { _ in
+                        calculateSuperPassword(for: superPassDate)
                     }
 
                 Button(action: { calculateSuperPassword(for: superPassDate) }) {

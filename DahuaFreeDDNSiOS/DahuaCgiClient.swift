@@ -156,9 +156,12 @@ class DahuaCgiClient {
 
         if inet_pton(AF_INET, host, &addr.sin_addr) <= 0 {
             // If domain name, try gethostbyname fallback
-            guard let hostent = gethostbyname(host) else { return false }
-            let hAddr = hostent.pointee.h_addr_list[0]!
-            memcpy(&addr.sin_addr, hAddr, Int(hostent.pointee.h_length))
+            guard let hostent = gethostbyname(host),
+                  let addrList = hostent.pointee.h_addr_list,
+                  let firstAddr = addrList[0] else {
+                return false
+            }
+            memcpy(&addr.sin_addr, firstAddr, Int(hostent.pointee.h_length))
         }
 
         let connRes = withUnsafePointer(to: &addr) { saPtrIn in
