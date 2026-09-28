@@ -136,8 +136,8 @@ class LanScanner: ObservableObject {
     }
 
     private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        // CGI probe targeting MagicBox / SystemInfo
-        guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
+        // Primary CGI probe targeting magicBox.cgi getSystemInfo (returns deviceType & SerialNo)
+        guard let url = URL(string: "http://\(ip):80/cgi-bin/magicBox.cgi?action=getSystemInfo") else {
             completion(nil)
             return
         }
@@ -156,10 +156,56 @@ class LanScanner: ObservableObject {
             let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
             let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
             let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
-
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
-            if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") || bodyText.contains("MagicBox") {
+            if statusCode == 200 || statusCode == 401 || bodyText.contains("appAuto") || bodyText.contains("SerialNo") || bodyText.contains("deviceType") {
+                let model = self.extractValue(from: bodyText, keys: ["deviceType", "DeviceType", "model", "Model"])
+                let sn = self.extractValue(from: bodyText, keys: ["SerialNo", "serialNo", "SN", "sn"])
+                let mac = self.extractValue(from: bodyText, keys: ["MACAddress", "mac", "MAC"])
+
+                let brand = self.parseBrand(text: combined, model: model, ip: ip, realm: authHeader)
+
+                let device = CameraDevice(
+                    ip: ip,
+                    port: 80,
+                    brand: brand,
+                    model: model,
+                    mac: mac,
+                    sn: sn,
+                    extraInfo: "Dahua/Imou CGI Verified"
+                )
+                completion(device)
+                return
+            }
+
+            self.probeFallbackConfigManager(ip: ip, session: session, completion: completion)
+        }
+        task.resume()
+    }
+
+    private func probeFallbackConfigManager(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
+        guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
+            completion(nil)
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 1.0
+
+        let task = session.dataTask(with: request) { data, response, error in
+            guard let httpRes = response as? HTTPURLResponse else {
+                self.probeFallbackRoot(ip: ip, session: session, completion: completion)
+                return
+            }
+
+            let statusCode = httpRes.statusCode
+            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
+            let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
+            let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
+            let combined = "\(serverHeader) \(authHeader) \(bodyText)"
+
+            if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") {
                 let model = self.extractValue(from: bodyText, keys: ["DeviceType", "deviceType", "model", "Model"])
                 let sn = self.extractValue(from: bodyText, keys: ["SerialNo", "serialNo", "SN", "sn"])
                 let mac = self.extractValue(from: bodyText, keys: ["MACAddress", "mac", "MAC"])

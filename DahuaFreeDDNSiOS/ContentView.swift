@@ -204,43 +204,34 @@ struct ContentView: View {
                         HStack {
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
-                                        Button(action: {
-                                            // Tap badge to toggle brand between Dahua and Imou
-                                            if scanner.discoveredDevices[idx].brand == .dahua {
-                                                scanner.discoveredDevices[idx].brand = .imou
-                                            } else if scanner.discoveredDevices[idx].brand == .imou {
-                                                scanner.discoveredDevices[idx].brand = .dahua
-                                            }
-                                        }) {
-                                            Text("\(dev.brand.rawValue) 🔄")
-                                                .font(.caption)
-                                                .bold()
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 3)
-                                                .background(badgeColor(for: dev.brand))
-                                                .foregroundColor(.white)
-                                                .cornerRadius(6)
-                                        }
+                                        Text(dev.brand.rawValue)
+                                            .font(.caption)
+                                            .bold()
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(badgeColor(for: dev.brand))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(6)
 
                                         Text("\(dev.ip):\(dev.port)")
                                             .font(.headline)
                                     }
 
                                     if !dev.sn.isEmpty {
-                                        Text("S/N: \(dev.sn)")
+                                        Text("🔵 S/N: \(dev.sn)")
                                             .font(.caption)
                                             .bold()
                                             .foregroundColor(.blue)
                                     }
 
                                     if !dev.model.isEmpty {
-                                        Text("Model: \(dev.model)")
+                                        Text("⚙️ Model: \(dev.model)")
                                             .font(.caption)
                                             .foregroundColor(.primary)
                                     }
 
                                     if !dev.mac.isEmpty {
-                                        Text("MAC: \(dev.mac)")
+                                        Text("📶 MAC: \(dev.mac)")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
@@ -570,11 +561,38 @@ struct ContentView: View {
                 if result.success {
                     self.appendLog("Thành công (HTTP \(result.statusCode)):\n\(result.rawText)")
                     self.rawFetchedConfig = result.rawText
-                    self.setStatus("Đã đọc xong cấu hình DDNS từ camera!", type: .success)
+                    self.parseAndPopulateDDNSConfig(result.rawText)
+                    self.setStatus("Đã đọc và dán thành công cấu hình DDNS vào form! 🎉", type: .success)
                 } else {
                     let errDesc = result.errorMessage ?? "Lỗi HTTP status: \(result.statusCode)"
                     self.appendLog("Lỗi: \(errDesc)")
                     self.setStatus("Không thể lấy cấu hình: \(errDesc)", type: .error)
+                }
+            }
+        }
+    }
+
+    private func parseAndPopulateDDNSConfig(_ rawText: String) {
+        let lines = rawText.components(separatedBy: .newlines)
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.contains("=") {
+                let parts = trimmed.components(separatedBy: "=")
+                if parts.count >= 2 {
+                    let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let value = parts[1...].joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if key.contains(".Address") && !value.isEmpty {
+                        self.serverAddr = value
+                    } else if key.contains(".HostName") && !value.isEmpty {
+                        self.domain = value
+                    } else if (key.contains(".User") || key.contains(".UserName")) && !value.isEmpty {
+                        self.ddnsUser = value
+                    } else if (key.contains(".Pass") || key.contains(".Password")) && !value.isEmpty {
+                        self.ddnsPass = value
+                    } else if key.contains(".Enable") {
+                        self.enableDdns = value.lowercased() == "true"
+                    }
                 }
             }
         }
