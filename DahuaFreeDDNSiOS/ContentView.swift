@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import AVFoundation
 import SafariServices
+import AudioToolbox
 
 struct DdnsPreset: Identifiable, Hashable {
     let id = UUID()
