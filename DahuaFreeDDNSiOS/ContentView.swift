@@ -202,18 +202,8 @@ struct ContentView: View {
                     ForEach(0..<scanner.discoveredDevices.count, id: \.self) { idx in
                         let dev = scanner.discoveredDevices[idx]
                         HStack(alignment: .center, spacing: 12) {
-                            if dev.brand == .dahua || dev.brand == .imou {
-                                CameraLogoIcon(brand: dev.brand)
-                            } else {
-                                Text(dev.brand.rawValue)
-                                    .font(.caption)
-                                    .bold()
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(badgeColor(for: dev.brand))
-                                    .foregroundColor(.white)
-                                    .cornerRadius(6)
-                            }
+                            CameraLogoIcon(brand: dev.brand)
+
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("\(dev.ip):\(dev.port)")
@@ -658,9 +648,23 @@ struct ContentView: View {
 struct CameraLogoIcon: View {
     let brand: CameraBrand
 
-    var body: some View {
+    static let logoImage: UIImage? = {
         if let path = Bundle.main.path(forResource: "logo", ofType: "png") ?? Bundle.main.path(forResource: "camera_logo", ofType: "png"),
            let uiImage = UIImage(contentsOfFile: path) {
+            return uiImage
+        }
+        if let uiImage = UIImage(named: "logo") ?? UIImage(named: "camera_logo") {
+            return uiImage
+        }
+        if let data = Data(base64Encoded: cameraLogoBase64String),
+           let uiImage = UIImage(data: data) {
+            return uiImage
+        }
+        return nil
+    }()
+
+    var body: some View {
+        if let uiImage = CameraLogoIcon.logoImage {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFit()
@@ -678,3 +682,4 @@ struct CameraLogoIcon: View {
         }
     }
 }
+
