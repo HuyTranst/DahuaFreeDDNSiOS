@@ -17,14 +17,6 @@ jobs:
 
       - name: Compile Swift directly to iOS ARM64 Binary
         run: |
-          echo "=== Collecting unique Swift files ==="
-          rm -rf src_tmp
-          mkdir -p src_tmp
-          find . -name "*.swift" -type f -not -path "*/src_tmp/*" -exec cp {} src_tmp/ \;
-
-          echo "Swift files to compile:"
-          ls -la src_tmp/
-
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "Using iOS SDK at: $SDK_PATH"
 
@@ -37,11 +29,21 @@ jobs:
                  -framework UIKit \
                  -framework AVFoundation \
                  -framework CoreImage \
-                 src_tmp/ContentView.swift \
-                 src_tmp/DahuaCgiClient.swift \
-                 src_tmp/LanScanner.swift \
-                 src_tmp/DahuaFreeDDNSApp.swift \
-                 -o DahuaFreeDDNS
+                 DahuaFreeDDNSiOS/ContentView.swift \
+                 DahuaFreeDDNSiOS/DahuaCgiClient.swift \
+                 DahuaFreeDDNSiOS/LanScanner.swift \
+                 DahuaFreeDDNSiOS/DahuaFreeDDNSApp.swift \
+                 -o DahuaFreeDDNS 2>&1 | tee compile.log
+
+          echo "### Swift Compilation Log" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat compile.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          if [ ! -f DahuaFreeDDNS ]; then
+            echo "Binary was not created. Stopping."
+            exit 1
+          fi
 
           echo "=== Packaging IPA Bundle ==="
           mkdir -p Payload/DahuaFreeDDNS.app
