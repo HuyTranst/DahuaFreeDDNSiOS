@@ -278,6 +278,7 @@ struct ContentView: View {
     @State private var rawFetchedConfig: String = ""
 
     private let cgiClient = DahuaCgiClient()
+    private let warrantyClient = DahuaWarrantyClient()
     // Check Port State
     @State private var checkPortHost: String = "192.168.1.108"
     @State private var customPortsSpec: String = "80, 443, 554, 37777, 8000, 8080, 23, 5000, 37778, 34567"

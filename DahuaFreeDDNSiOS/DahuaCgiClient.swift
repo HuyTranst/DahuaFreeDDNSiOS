@@ -42,7 +42,7 @@ class DahuaCgiClient {
         port: String,
         user: String,
         pass: String,
-        channelIdx: Int,
+        channelIdx: String,
         enable: Bool,
         serverAddr: String,
         domain: String,
@@ -66,6 +66,36 @@ class DahuaCgiClient {
             "&DDNS[\(idx)].Password=\(encPass)"
 
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    func saveDahuaDDNSConfig(
+        ip: String,
+        port: String,
+        user: String,
+        pass: String,
+        channelIdx: Int,
+        enable: Bool,
+        serverAddr: String,
+        domain: String,
+        ddnsUser: String,
+        ddnsPass: String,
+        existingKeysText: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        saveDahuaDDNSConfig(
+            ip: ip,
+            port: port,
+            user: user,
+            pass: pass,
+            channelIdx: "\(channelIdx)",
+            enable: enable,
+            serverAddr: serverAddr,
+            domain: domain,
+            ddnsUser: ddnsUser,
+            ddnsPass: ddnsPass,
+            existingKeysText: existingKeysText,
+            completion: completion
+        )
     }
 
     func changeCameraIp(
