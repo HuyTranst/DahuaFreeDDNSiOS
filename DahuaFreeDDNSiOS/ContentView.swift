@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import CoreImage
 
 struct DdnsPreset: Identifiable, Hashable {
     let id = UUID()
