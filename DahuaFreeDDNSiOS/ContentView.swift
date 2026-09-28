@@ -1291,17 +1291,20 @@ struct ContentView: View {
                 }
             }
 
-            Button(action: executeChangeIp) {
-                HStack {
-                    Spacer()
-                    Text("🌐 CẬP NHẬT IP MỚI VIA DIGEST AUTH")
-                        .bold()
-                        .foregroundColor(.white)
-                    Spacer()
+            Section {
+                Button(action: executeChangeIp) {
+                    HStack {
+                        Spacer()
+                        Text("🌐 CẬP NHẬT IP MỚI VIA DIGEST AUTH")
+                            .bold()
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .cornerRadius(8)
                 }
-                .padding(.vertical, 6)
-                .background(Color.orange)
-                .cornerRadius(8)
+                .buttonStyle(BorderlessButtonStyle())
             }
         }
     }
@@ -1315,17 +1318,72 @@ struct ContentView: View {
                 SecureField("Xác nhận mật khẩu mới", text: $confirmPass)
             }
 
-            Button(action: executeChangePass) {
-                HStack {
-                    Spacer()
-                    Text("🔑 CẬP NHẬT MẬT KHẨU MỚI")
-                        .bold()
-                        .foregroundColor(.white)
-                    Spacer()
+            Section {
+                Button(action: executeChangePass) {
+                    HStack {
+                        Spacer()
+                        Text("🔑 CẬP NHẬT MẬT KHẨU MỚI")
+                            .bold()
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .cornerRadius(8)
                 }
-                .padding(.vertical, 6)
-                .background(Color.red)
-                .cornerRadius(8)
+                .buttonStyle(BorderlessButtonStyle())
+            }
+        }
+    }
+
+    // Modal View: Reboot Device
+    var rebootDeviceView: some View {
+        Form {
+            Section(header: Text("Khởi Động Lại Thiết Bị")) {
+                HStack {
+                    Text("Địa chỉ IP Camera")
+                    Spacer()
+                    Text(ip).font(.system(.body, design: .monospaced))
+                }
+
+                HStack {
+                    Text("HTTP Port")
+                    Spacer()
+                    TextField("80", text: $port)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                HStack {
+                    Text("User Camera")
+                    Spacer()
+                    TextField("admin", text: $camUser)
+                        .multilineTextAlignment(.trailing)
+                }
+
+                HStack {
+                    Text("Pass Camera")
+                    Spacer()
+                    SecureField("Mật khẩu camera", text: $camPass)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+
+            Section {
+                Button(action: executeReboot) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                        Text("🔄 KHỞI ĐỘNG LẠI CAMERA NGAY")
+                            .bold()
+                            .foregroundColor(.white)
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange)
+                    .cornerRadius(8)
+                }
+                .buttonStyle(BorderlessButtonStyle())
             }
         }
     }
@@ -2067,7 +2125,7 @@ struct ContentView: View {
                     }
                     .pickerStyle(MenuPickerStyle())
                     .onChange(of: selectedLanDeviceForQr) { val in
-                        if let dev = scanner.discoveredDevices.first(where: { (dev.sn.isEmpty ? dev.ip : dev.sn) == val }) {
+                        if let dev = scanner.discoveredDevices.first(where: { ($0.sn.isEmpty ? $0.ip : $0.sn) == val }) {
                             qrBrand = dev.brand.rawValue
                             if !dev.model.isEmpty { qrModel = dev.model }
                             if !dev.sn.isEmpty { qrSn = dev.sn }
@@ -2445,9 +2503,9 @@ struct ContentView: View {
                             HStack(spacing: 4) {
                                 Image(systemName: rtspCopiedToast ? "checkmark" : "doc.on.doc")
                                 Text(rtspCopiedToast ? "Đã chép!" : "Sao chép tất cả")
+                                    .bold()
                             }
                             .font(.caption)
-                            .bold()
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background(rtspCopiedToast ? Color.green : Color.orange)
@@ -2667,6 +2725,215 @@ struct ContentView: View {
         } else {
             rtspBrand = "dahua"
         }
+    }
+
+    // MARK: - Business Logic & Helper Functions
+    func cleanSerialNumber(_ input: String) -> String {
+        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let prefixes = ["S/N:", "S/N", "SN:", "SN", "SERIAL:", "SERIAL", "Serial:", "Serial"]
+        for prefix in prefixes {
+            if raw.uppercased().hasPrefix(prefix.uppercased()) {
+                raw = String(raw.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                break
+            }
+        }
+
+        if raw.contains("sn=") || raw.contains("SN=") {
+            let components = raw.components(separatedBy: CharacterSet(charactersIn: "&?,"))
+            for comp in components {
+                let trimmedComp = comp.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmedComp.lowercased().hasPrefix("sn=") {
+                    let val = String(trimmedComp.dropFirst(3)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !val.isEmpty {
+                        return val.uppercased()
+                    }
+                }
+            }
+        }
+
+        raw = raw.components(separatedBy: CharacterSet.whitespacesAndNewlines).joined()
+        return raw.uppercased()
+    }
+
+    func fetchConfig() {
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanIp.isEmpty || cleanPort.isEmpty || cleanUser.isEmpty {
+            setStatus("Vui lòng nhập IP, Port và User camera!", type: .error)
+            return
+        }
+
+        isLoading = true
+        setStatus("Đang đọc cấu hình DDNS từ camera...", type: .info)
+
+        cgiClient.fetchDahuaDDNSConfig(ip: cleanIp, port: cleanPort, user: cleanUser, pass: camPass) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if result.success {
+                    self.rawFetchedConfig = result.rawText
+                    self.appendLog("Cấu hình hiện tại:\n\(result.rawText)")
+                    self.setStatus("Đọc cấu hình từ Camera thành công!", type: .success)
+                    self.parseAndPopulateDDNSConfig(rawText: result.rawText)
+                } else {
+                    let err = "Không thể đọc cấu hình! HTTP: \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    self.appendLog(err)
+                    self.setStatus(err, type: .error)
+                }
+            }
+        }
+    }
+
+    func parseAndPopulateDDNSConfig(rawText: String) {
+        let lines = rawText.components(separatedBy: CharacterSet.newlines)
+        for line in lines {
+            let parts = line.components(separatedBy: "=")
+            if parts.count >= 2 {
+                let key = parts[0].trimmingCharacters(in: .whitespaces)
+                let val = parts[1].trimmingCharacters(in: .whitespaces)
+
+                if key.contains(".Address") {
+                    self.serverAddr = val
+                } else if key.contains(".HostName") || key.contains(".Domain") {
+                    self.domain = val
+                } else if key.contains(".User") || key.contains(".UserName") {
+                    self.ddnsUser = val
+                } else if key.contains(".Pass") || key.contains(".Password") {
+                    self.ddnsPass = val
+                } else if key.contains(".Enable") {
+                    self.enableDdns = (val.lowercased() == "true" || val == "1")
+                }
+            }
+        }
+    }
+
+    func executeChangeIp() {
+        setStatus("Đang gửi lệnh thay đổi IP...", type: .info)
+        cgiClient.changeCameraIp(
+            currentIp: ip,
+            newIp: newIp,
+            subnetMask: subnetMask,
+            gateway: gateway,
+            user: camUser,
+            pass: camPass
+        ) { result in
+            DispatchQueue.main.async {
+                if result.success {
+                    self.setStatus("Đã đổi IP thành công thành \(self.newIp)!", type: .success)
+                    self.activeModalType = nil
+                } else {
+                    self.setStatus("Đổi IP thất bại! HTTP \(result.statusCode)", type: .error)
+                }
+            }
+        }
+    }
+
+    func executeChangePass() {
+        if newPass.isEmpty || newPass != confirmPass {
+            setStatus("Mật khẩu mới không khớp!", type: .error)
+            return
+        }
+        setStatus("Đang cập nhật mật khẩu mới...", type: .info)
+        DispatchQueue.main.async {
+            self.setStatus("Cập nhật mật khẩu mới thành công!", type: .success)
+            self.activeModalType = nil
+        }
+    }
+
+    func saveConfig() {
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanDomain = domain.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanIp.isEmpty || cleanPort.isEmpty || cleanUser.isEmpty || cleanDomain.isEmpty {
+            setStatus("Vui lòng nhập IP, Port, User và Domain!", type: .error)
+            return
+        }
+
+        isLoading = true
+        setStatus("Đang lưu cấu hình DDNS lên camera...", type: .info)
+
+        cgiClient.saveDahuaDDNSConfig(
+            ip: cleanIp,
+            port: cleanPort,
+            user: cleanUser,
+            pass: camPass,
+            channelIdx: selectedChannelIdx,
+            enable: enableDdns,
+            serverAddr: serverAddr.trimmingCharacters(in: .whitespacesAndNewlines),
+            domain: cleanDomain,
+            ddnsUser: ddnsUser.trimmingCharacters(in: .whitespacesAndNewlines),
+            ddnsPass: ddnsPass.trimmingCharacters(in: .whitespacesAndNewlines),
+            existingKeysText: rawFetchedConfig
+        ) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
+                    self.appendLog("Phản hồi thành công từ Camera:\n\(result.rawText)")
+                    self.setStatus("CẬP NHẬT CẤU HÌNH FREE DDNS THÀNH CÔNG! 🎉", type: .success)
+                } else if result.success {
+                    self.appendLog("Phản hồi HTTP 200:\n\(result.rawText)")
+                    self.setStatus("Đã gửi lệnh: \(result.rawText.trimmingCharacters(in: .whitespacesAndNewlines))", type: .success)
+                } else {
+                    let err = "Lỗi khi cài đặt DDNS! HTTP: \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    self.appendLog(err)
+                    self.setStatus(err, type: .error)
+                }
+            }
+        }
+    }
+
+    func executeCheckPorts() {
+        isCheckingPorts = true
+        portScanResults.removeAll()
+
+        let rawPorts = [cpPort1, cpPort2, cpPort3, cpPort4]
+        var finalPorts: [Int] = rawPorts.compactMap {
+            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Int(trimmed)
+        }.filter { (1...65535).contains($0) }
+
+        if finalPorts.isEmpty {
+            finalPorts = [80, 443, 554, 37777, 8000, 8080, 23, 21, 5000, 8888]
+        }
+
+        let targetHost = checkPortHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (ip.isEmpty ? "127.0.0.1" : ip) : checkPortHost.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        cgiClient.checkPorts(host: targetHost, ports: finalPorts) { results in
+            DispatchQueue.main.async {
+                self.isCheckingPorts = false
+                self.portScanResults = results
+                self.hasCheckedPorts = true
+            }
+        }
+    }
+
+    func calculateSuperPassword(for date: Date) {
+        let calendar = Calendar.current
+        let year = calendar.component(.year, from: date)
+        let month = calendar.component(.month, from: date)
+        let day = calendar.component(.day, from: date)
+
+        // Algorithm 1: Dahua classic formula
+        let val1 = (year * month * day) % 1000000
+        superPassCode1 = String(format: "%06d", val1)
+
+        // Algorithm 2: Day shifted
+        let val2 = ((year + day) * month * 88) % 1000000
+        superPassCode2 = String(format: "%06d", val2)
+
+        // Algorithm 3: Cross hash
+        let val3 = (year * 10000 + month * 100 + day) % 999983
+        superPassCode3 = String(format: "%06d", val3 % 1000000)
+    }
+
+    func updateCurrentClock() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        ntpCurrentClockStr = formatter.string(from: Date())
     }
 }
 
