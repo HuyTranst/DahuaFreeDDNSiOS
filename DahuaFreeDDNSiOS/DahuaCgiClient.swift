@@ -136,7 +136,7 @@ class DahuaCgiClient {
         }
 
         group.notify(queue: .main) {
-            results.sort(key: { $0.port < $1.port })
+            results.sort(by: { $0.port < $1.port })
             completion(results)
         }
     }
