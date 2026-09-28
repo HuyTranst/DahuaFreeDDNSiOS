@@ -375,23 +375,14 @@ struct ContentView: View {
         }
         .actionSheet(isPresented: $showActionSheet) {
             ActionSheet(
-                title: Text("Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
-                message: Text("Hãng: \(activeDevice?.brand.rawValue ?? "Camera")"),
+                title: Text("Cài đặt & Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
+                message: Text("Hãng: \(activeDevice?.brand.rawValue ?? "Camera") | S/N: \(activeDevice?.sn.isEmpty == false ? activeDevice!.sn : "N/A")"),
                 buttons: [
                     .default(Text("⚙️ Cài Đặt Free DDNS")) {
                         if let dev = activeDevice {
                             self.ip = dev.ip
                             self.port = "\(dev.port)"
                             self.activeModalType = .setDdns
-                        }
-                    },
-                    .default(Text("🔍 Check Bảo Hành S/N (\(activeDevice?.sn ?? ""))")) {
-                        if let dev = activeDevice, !dev.sn.isEmpty {
-                            let cleaned = self.cleanSerialNumber(dev.sn)
-                            self.rawScannedSn = dev.sn
-                            self.cleanedSn = cleaned
-                            self.selectedTab = 2
-                            self.triggerDirectWarrantyCheck(sn: cleaned)
                         }
                     },
                     .default(Text("🌐 Đổi địa chỉ IP")) {
@@ -405,6 +396,15 @@ struct ContentView: View {
                         if let dev = activeDevice {
                             self.ip = dev.ip
                             self.activeModalType = .changePass
+                        }
+                    },
+                    .default(Text("🔍 Check Bảo Hành S/N")) {
+                        if let dev = activeDevice, !dev.sn.isEmpty {
+                            let cleaned = self.cleanSerialNumber(dev.sn)
+                            self.rawScannedSn = dev.sn
+                            self.cleanedSn = cleaned
+                            self.selectedTab = 2
+                            self.triggerDirectWarrantyCheck(sn: cleaned)
                         }
                     },
                     .cancel(Text("Hủy"))
@@ -726,12 +726,12 @@ struct ContentView: View {
                         Text("Thiết Bị Phát Hiện (\(scanner.discoveredDevices.count))")
                             .font(.headline)
                         Spacer()
-                        Button("Quét ngay") {
-                            selectedTab = 2
+                        Button(scanner.isScanning ? "Đang quét..." : "Quét ngay 🔄") {
                             scanner.startScan()
                         }
                         .font(.subheadline)
                         .foregroundColor(.orange)
+                        .disabled(scanner.isScanning)
                     }
                     .padding(.horizontal)
 
@@ -743,8 +743,7 @@ struct ContentView: View {
                             Text("Chưa quét thiết bị nào trong LAN.")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            Button("Nhấn vào đây để quét tìm S/N ngay") {
-                                selectedTab = 2
+                            Button("Nhấn vào đây để quét tìm IP Camera ngay") {
                                 scanner.startScan()
                             }
                             .font(.caption)
@@ -756,33 +755,46 @@ struct ContentView: View {
                         .cornerRadius(12)
                         .padding(.horizontal)
                     } else {
-                        ForEach(0..<min(3, scanner.discoveredDevices.count), id: \.self) { idx in
-                            let dev = scanner.discoveredDevices[idx]
+                        ForEach(scanner.discoveredDevices) { dev in
                             HStack {
                                 CameraLogoIcon(brand: dev.brand)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(dev.ip):\(dev.port)")
-                                        .font(.headline)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack {
+                                        Text("\(dev.ip):\(dev.port)")
+                                            .font(.headline)
+                                        Text("(\(dev.brand.rawValue))")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
                                     if !dev.sn.isEmpty {
                                         Text("🔵 S/N: \(dev.sn)")
                                             .font(.caption)
                                             .foregroundColor(.blue)
                                     }
+                                    if !dev.model.isEmpty {
+                                        Text("Model: \(dev.model)")
+                                            .font(.caption2)
+                                            .foregroundColor(.gray)
+                                    }
                                 }
                                 Spacer()
-                                Button("Check S/N") {
-                                    let cleaned = self.cleanSerialNumber(dev.sn)
-                                    self.rawScannedSn = dev.sn
-                                    self.cleanedSn = cleaned
-                                    self.selectedTab = 2
-                                    self.triggerDirectWarrantyCheck(sn: cleaned)
+                                Button(action: {
+                                    self.activeDevice = dev
+                                    self.showActionSheet = true
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "gearshape.fill")
+                                        Text("Cài đặt")
+                                            .font(.caption)
+                                            .bold()
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.orange)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(8)
                                 }
-                                .font(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.orange)
-                                .foregroundColor(.white)
-                                .cornerRadius(6)
+                                .buttonStyle(BorderlessButtonStyle())
                             }
                             .padding()
                             .background(Color(UIColor.secondarySystemBackground))
