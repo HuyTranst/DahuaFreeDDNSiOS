@@ -569,20 +569,23 @@
             item.className = 'device-item';
             
             const isDahuaOrImou = dev.brand === "Dahua" || dev.brand === "Imou";
-            const logoHtml = isDahuaOrImou ? `<img src="camera_logo.png" style="width: 32px; height: 32px; border-radius: 6px; margin-right: 8px;" onerror="this.style.display='none'">` : '';
+            
+            // For Dahua/Imou: Show ONLY logo.png image (NO text badge!). For other brands: show text badge.
+            const brandGraphic = isDahuaOrImou 
+                ? `<img src="logo.png" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover; box-shadow: 0 2px 6px rgba(0,0,0,0.15);" alt="Logo">`
+                : `<span class="brand-badge badge-${dev.brand.toLowerCase()}">${dev.brand}</span>`;
 
             let detailsHtml = '';
             if (dev.sn) detailsHtml += `<div style="color: #007AFF; font-weight: 700; font-size: 13px;">🔵 S/N: ${dev.sn}</div>`;
-            if (dev.model) detailsHtml += `<div style="font-size: 13px; color: var(--text-color);">⚙️ Model: ${dev.model}</div>`;
+            if (dev.model) detailsHtml += `<div style="font-size: 13px; color: var(--text-color); font-weight: 500;">⚙️ Model: ${dev.model}</div>`;
             if (dev.mac) detailsHtml += `<div style="font-size: 12px; color: var(--sub-text);">📶 MAC: ${dev.mac}</div>`;
 
             item.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    ${logoHtml}
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    ${brandGraphic}
                     <div class="device-info">
                         <div>
-                            <span class="brand-badge badge-${dev.brand.toLowerCase()}">${dev.brand}</span>
-                            <span class="device-ip">${dev.ip}</span>
+                            <span class="device-ip">${dev.ip}:${dev.port || 80}</span>
                         </div>
                         ${detailsHtml}
                     </div>

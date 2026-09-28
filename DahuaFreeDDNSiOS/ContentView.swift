@@ -201,25 +201,23 @@ struct ContentView: View {
                 } else {
                     ForEach(0..<scanner.discoveredDevices.count, id: \.self) { idx in
                         let dev = scanner.discoveredDevices[idx]
-                        HStack(alignment: .top, spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
                             if dev.brand == .dahua || dev.brand == .imou {
                                 CameraLogoIcon(brand: dev.brand)
+                            } else {
+                                Text(dev.brand.rawValue)
+                                    .font(.caption)
+                                    .bold()
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(badgeColor(for: dev.brand))
+                                    .foregroundColor(.white)
+                                    .cornerRadius(6)
                             }
 
                             VStack(alignment: .leading, spacing: 3) {
-                                HStack {
-                                    Text(dev.brand.rawValue)
-                                        .font(.caption)
-                                        .bold()
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(badgeColor(for: dev.brand))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(6)
-
-                                    Text("\(dev.ip):\(dev.port)")
-                                        .font(.headline)
-                                }
+                                Text("\(dev.ip):\(dev.port)")
+                                    .font(.headline)
 
                                 if !dev.sn.isEmpty {
                                     Text("🔵 S/N: \(dev.sn)")
@@ -661,7 +659,7 @@ struct CameraLogoIcon: View {
     let brand: CameraBrand
 
     var body: some View {
-        if let path = Bundle.main.path(forResource: "camera_logo", ofType: "png"),
+        if let path = Bundle.main.path(forResource: "logo", ofType: "png") ?? Bundle.main.path(forResource: "camera_logo", ofType: "png"),
            let uiImage = UIImage(contentsOfFile: path) {
             Image(uiImage: uiImage)
                 .resizable()
@@ -674,11 +672,8 @@ struct CameraLogoIcon: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(brand == .dahua ? Color.red : Color.orange)
                     .frame(width: 44, height: 44)
-                VStack(spacing: 0) {
-                    Text(brand == .dahua ? "DAHUA" : "IMOU")
-                        .font(.system(size: 9, weight: .black, design: .rounded))
-                        .foregroundColor(.white)
-                }
+                Image(systemName: "video.fill")
+                    .foregroundColor(.white)
             }
         }
     }
