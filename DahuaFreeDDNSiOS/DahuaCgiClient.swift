@@ -25,6 +25,66 @@ class DahuaCgiClient {
         self.session = URLSession(configuration: config)
     }
 
+    // MARK: - DDNS & IP Configuration
+    func fetchDahuaDDNSConfig(
+        ip: String,
+        port: String,
+        user: String,
+        pass: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=getConfig&name=DDNS"
+        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    func saveDahuaDDNSConfig(
+        ip: String,
+        port: String,
+        user: String,
+        pass: String,
+        channelIdx: Int,
+        enable: Bool,
+        serverAddr: String,
+        domain: String,
+        ddnsUser: String,
+        ddnsPass: String,
+        existingKeysText: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let enStr = enable ? "true" : "false"
+        let encDomain = domain.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? domain
+        let encServer = serverAddr.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? serverAddr
+        let encUser = ddnsUser.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ddnsUser
+        let encPass = ddnsPass.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ddnsPass
+
+        let idx = channelIdx
+        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig" +
+            "&DDNS[\(idx)].Enable=\(enStr)" +
+            "&DDNS[\(idx)].ServerAddress=\(encServer)" +
+            "&DDNS[\(idx)].DomainName=\(encDomain)" +
+            "&DDNS[\(idx)].Username=\(encUser)" +
+            "&DDNS[\(idx)].Password=\(encPass)"
+
+        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    func changeCameraIp(
+        currentIp: String,
+        newIp: String,
+        subnetMask: String,
+        gateway: String,
+        user: String,
+        pass: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let urlString = "http://\(currentIp):80/cgi-bin/configManager.cgi?action=setConfig" +
+            "&Network.eth0.IPAddress=\(newIp)" +
+            "&Network.eth0.SubnetMask=\(subnetMask)" +
+            "&Network.eth0.DefaultGateway=\(gateway)"
+
+        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
     // MARK: - Reboot Device
     func rebootDevice(
         ip: String,

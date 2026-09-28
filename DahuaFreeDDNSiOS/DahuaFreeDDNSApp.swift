@@ -19,5 +19,5 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 @_cdecl("main")
 func main(argc: Int32, argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32 {
-    return UIApplicationMain(argc, argv, nil, NSStringFromClass(AppDelegate.self))
+    return UIApplicationMain(CommandLine.argc, CommandLine.unsafeArgv, nil, NSStringFromClass(AppDelegate.self))
 }
