@@ -42,7 +42,7 @@ class LanScanner: ObservableObject {
         DispatchQueue.main.async {
             self.isScanning = true
             self.progress = 0.05
-            self.statusMessage = "Đang quét phát hiện Dahua, Imou & camera LAN..."
+            self.statusMessage = "Đang quét & nhận diện chính xác Dahua & Imou..."
             self.discoveredDevices.removeAll()
         }
 
@@ -56,8 +56,8 @@ class LanScanner: ObservableObject {
             var completedCount = 0
 
             let sessionConfig = URLSessionConfiguration.default
-            sessionConfig.timeoutIntervalForRequest = 1.0
-            sessionConfig.timeoutIntervalForResource = 1.0
+            sessionConfig.timeoutIntervalForRequest = 1.2
+            sessionConfig.timeoutIntervalForResource = 1.2
             let session = URLSession(configuration: sessionConfig)
 
             let semaphore = DispatchSemaphore(value: 32)
@@ -104,63 +104,119 @@ class LanScanner: ObservableObject {
     }
 
     private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        let ports = [80, 37777, 8000, 8080]
-        var foundDevice: CameraDevice? = nil
-        let innerGroup = DispatchGroup()
+        // Probe Dahua exclusive CGI endpoint first: /cgi-bin/configManager.cgi
+        guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
+            completion(nil)
+            return
+        }
 
-        for port in ports {
-            if foundDevice != nil { break }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 1.2
 
-            guard let url = URL(string: "http://\(ip):\(port)/") else { continue }
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.timeoutInterval = 1.0
-
-            innerGroup.enter()
-            let task = session.dataTask(with: request) { data, response, error in
-                defer { innerGroup.leave() }
-
-                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-                if statusCode > 0 || error == nil {
-                    let httpRes = response as? HTTPURLResponse
-                    let server = (httpRes?.allHeaderFields["Server"] as? String)?.lowercased() ?? ""
-                    let auth = (httpRes?.allHeaderFields["WWW-Authenticate"] as? String)?.lowercased() ?? ""
-                    let body = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
-                    let combined = "\(server) \(auth) \(body)"
-
-                    var brand: CameraBrand = .unknown
-                    if combined.contains("imou") || combined.contains("lechange") {
-                        brand = .imou
-                    } else if combined.contains("dahua") || port == 37777 {
-                        brand = .dahua
-                    } else if combined.contains("hikvision") || port == 8000 {
-                        brand = .hikvision
-                    } else if combined.contains("uniview") || combined.contains("unv") {
-                        brand = .unv
-                    } else if combined.contains("seetong") {
-                        brand = .seetong
-                    } else if combined.contains("tiandy") {
-                        brand = .tiandy
-                    }
-
-                    if foundDevice == nil && (statusCode > 0 || port == 37777) {
-                        foundDevice = CameraDevice(
-                            ip: ip,
-                            port: port,
-                            brand: brand,
-                            model: "",
-                            mac: "",
-                            extraInfo: "Port \(port)"
-                        )
-                    }
-                }
+        let task = session.dataTask(with: request) { data, response, error in
+            guard let httpRes = response as? HTTPURLResponse else {
+                // Try fallback probing port 80 root if CGI failed
+                self.probeFallbackRoot(ip: ip, session: session, completion: completion)
+                return
             }
-            task.resume()
+
+            let statusCode = httpRes.statusCode
+            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate")?.lowercased() ?? ""
+            let serverHeader = self.getHeaderValue(httpRes, name: "Server")?.lowercased() ?? ""
+            let bodyText = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
+
+            let combined = "\(serverHeader) \(authHeader) \(bodyText)"
+
+            // 1. Exclusive Signature: If /cgi-bin/configManager.cgi returns 401 Unauthorized or 200 OK -> IT IS 100% DAHUA OR IMOU!
+            if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") {
+                var brand: CameraBrand = .dahua
+
+                // Check Imou specific signatures
+                if combined.contains("imou") || combined.contains("lechange") ||
+                    combined.contains("ranger") || combined.contains("cruiser") ||
+                    combined.contains("rex") || combined.contains("cue") ||
+                    combined.contains("ipc-a") || combined.contains("ipc-c") ||
+                    combined.contains("ipc-f") || combined.contains("ipc-g") {
+                    brand = .imou
+                }
+
+                let device = CameraDevice(
+                    ip: ip,
+                    port: 80,
+                    brand: brand,
+                    model: "",
+                    mac: "",
+                    extraInfo: "CGI Verified (Dahua/Imou)"
+                )
+                completion(device)
+                return
+            }
+
+            // 2. Check other camera signatures (Hikvision ISAPI, UNV, Seetong, etc.)
+            self.probeFallbackRoot(ip: ip, session: session, completion: completion)
+        }
+        task.resume()
+    }
+
+    private func probeFallbackRoot(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
+        guard let url = URL(string: "http://\(ip):80/") else {
+            completion(nil)
+            return
         }
 
-        innerGroup.notify(queue: .global()) {
-            completion(foundDevice)
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 1.0
+
+        let task = session.dataTask(with: request) { data, response, error in
+            guard let httpRes = response as? HTTPURLResponse else {
+                completion(nil)
+                return
+            }
+
+            let serverHeader = self.getHeaderValue(httpRes, name: "Server")?.lowercased() ?? ""
+            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate")?.lowercased() ?? ""
+            let bodyText = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
+            let combined = "\(serverHeader) \(authHeader) \(bodyText)"
+
+            var brand: CameraBrand = .unknown
+            if combined.contains("dahua") || combined.contains("web3.0") || combined.contains("web5.0") {
+                brand = .dahua
+            } else if combined.contains("imou") || combined.contains("lechange") {
+                brand = .imou
+            } else if combined.contains("hikvision") || combined.contains("app-web/") {
+                brand = .hikvision
+            } else if combined.contains("uniview") || combined.contains("unv") {
+                brand = .unv
+            } else if combined.contains("seetong") {
+                brand = .seetong
+            } else if combined.contains("tiandy") {
+                brand = .tiandy
+            } else if httpRes.statusCode == 401 || httpRes.statusCode == 200 {
+                brand = .dahua // Fallback default Dahua CGI compatible camera
+            }
+
+            let device = CameraDevice(
+                ip: ip,
+                port: 80,
+                brand: brand,
+                model: "",
+                mac: "",
+                extraInfo: "Port 80"
+            )
+            completion(device)
         }
+        task.resume()
+    }
+
+    private func getHeaderValue(_ response: HTTPURLResponse, name: String) -> String? {
+        for (key, value) in response.allHeaderFields {
+            if let keyStr = key as? String, keyStr.caseInsensitiveCompare(name) == .orderedSame {
+                return "\(value)"
+            }
+        }
+        return nil
     }
 
     private func getLocalIPAddress() -> String {

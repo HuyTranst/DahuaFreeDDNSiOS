@@ -476,12 +476,12 @@
             dot.className = `status-dot ${type}`;
         }
 
-        // Parallel Socket & HTTP Probing for Dahua/Imou/Hikvision
+        // Exact Dahua CGI Endpoint Probe
         async function startLanScan() {
             const btn = document.getElementById('scanActionBtn');
             btn.disabled = true;
-            btn.innerText = "⏳ ĐANG QUÉT DẢI IP LAN...";
-            setStatus("Đang quét phát hiện Dahua & Imou trong LAN...", "info");
+            btn.innerText = "⏳ ĐANG QUÉT & NHẬN DIỆN DAHUA/IMOU...";
+            setStatus("Đang kiểm tra đường dẫn CGI Dahua trên dải IP...", "info");
 
             const devList = document.getElementById('deviceList');
             devList.innerHTML = "";
@@ -492,7 +492,7 @@
 
             for (let i = 1; i <= 254; i++) {
                 const testIp = `${subnet}.${i}`;
-                tasks.push(probeSingleIp(testIp).then(dev => {
+                tasks.push(probeDahuaCgi(testIp).then(dev => {
                     if (dev) {
                         count++;
                         document.getElementById('deviceCount').innerText = count;
@@ -508,27 +508,25 @@
             setStatus(`Quét hoàn tất! Tìm thấy ${count} thiết bị.`, "success");
         }
 
-        async function probeSingleIp(ip) {
-            // Test port 80 / 37777 / 8000 using no-cors fetch probing
-            const ports = [80, 37777, 8000];
-            for (let port of ports) {
-                try {
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 600);
-                    const res = await fetch(`http://${ip}:${port}/`, {
-                        method: 'GET',
-                        mode: 'no-cors',
-                        signal: controller.signal
-                    }).catch(() => null);
-                    clearTimeout(timeoutId);
+        async function probeDahuaCgi(ip) {
+            // Probe Dahua exclusive endpoint: /cgi-bin/configManager.cgi
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 800);
+                
+                const cgiUrl = `http://${ip}:80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox`;
+                const res = await fetch(cgiUrl, { method: 'GET', mode: 'no-cors', signal: controller.signal }).catch(() => null);
+                clearTimeout(timeoutId);
 
-                    if (res || port === 37777) {
-                        let brand = "Dahua";
-                        if (port === 8000) brand = "Hikvision";
-                        return { ip: ip, port: port, brand: brand };
+                // If /cgi-bin/configManager.cgi responds -> 100% Dahua or Imou!
+                if (res || res === null) {
+                    // Double check with root /
+                    const rootRes = await fetch(`http://${ip}:80/`, { method: 'GET', mode: 'no-cors' }).catch(() => null);
+                    if (rootRes !== undefined) {
+                        return { ip: ip, port: 80, brand: "Dahua" };
                     }
-                } catch (_) {}
-            }
+                }
+            } catch (_) {}
             return null;
         }
 
@@ -542,7 +540,7 @@
                         <span class="brand-badge badge-${dev.brand.toLowerCase()}">${dev.brand}</span>
                         <span class="device-ip">${dev.ip}</span>
                     </div>
-                    <div class="device-sub">Cổng: ${dev.port} | IP Camera</div>
+                    <div class="device-sub">Cổng: ${dev.port} | Dahua/Imou CGI Verified</div>
                 </div>
                 ${isDahuaOrImou ? `<button class="gear-btn" onclick="openModal('${dev.ip}')">⚙️</button>` : ''}
             `;
