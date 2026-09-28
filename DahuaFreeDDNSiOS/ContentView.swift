@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct DdnsPreset: Identifiable, Hashable {
     let id = UUID()
