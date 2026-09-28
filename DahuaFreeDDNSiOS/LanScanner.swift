@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import Darwin
 
 enum CameraBrand: String, CaseIterable, Identifiable {
     case dahua = "Dahua"
@@ -55,10 +56,9 @@ class LanScanner: ObservableObject {
             let totalHosts = 254
             var completedCount = 0
 
-            // Send UDP DHDiscover broadcast first
+            // Send UDP DHDiscover broadcast
             self.sendUDPDiscovery()
 
-            // Parallel Subnet Port & Banner Scanner (32 concurrent threads)
             let semaphore = DispatchSemaphore(value: 32)
 
             for host in 1...totalHosts {
@@ -116,7 +116,6 @@ class LanScanner: ObservableObject {
         var brand: CameraBrand = .unknown
         var extraBanner = ""
 
-        // Port 37777 is the native Dahua & Imou protocol port!
         if is37777Open {
             brand = .dahua
             let banner = checkHttpBanner(ip: ip, port: is80Open ? 80 : 8080)
@@ -163,7 +162,7 @@ class LanScanner: ObservableObject {
     private func isPortOpen(ip: String, port: Int32, timeoutSec: Double) -> Bool {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = in_port_t(port.bigEndian)
+        addr.sin_port = UInt16(port).bigEndian
         guard inet_pton(AF_INET, ip, &addr.sin_addr) == 1 else { return false }
 
         let sock = socket(AF_INET, SOCK_STREAM, 0)
@@ -220,7 +219,6 @@ class LanScanner: ObservableObject {
     }
 
     private func sendUDPDiscovery() {
-        // Broadcast UDP DHDiscover payload on port 37810
         let payload = "{\"method\":\"DHDiscover.search\",\"params\":{\"mac\":\"\"}}"
         guard let data = payload.data(using: .utf8) else { return }
 
@@ -233,7 +231,7 @@ class LanScanner: ObservableObject {
 
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = in_port_t(37810.bigEndian)
+        addr.sin_port = UInt16(37810).bigEndian
         inet_pton(AF_INET, "255.255.255.255", &addr.sin_addr)
 
         _ = data.withUnsafeBytes { ptr in
