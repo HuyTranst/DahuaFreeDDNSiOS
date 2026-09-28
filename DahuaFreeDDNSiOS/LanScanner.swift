@@ -42,7 +42,7 @@ class LanScanner: ObservableObject {
         DispatchQueue.main.async {
             self.isScanning = true
             self.progress = 0.05
-            self.statusMessage = "Đang quét & nhận diện chính xác Dahua & Imou..."
+            self.statusMessage = "Đang quét & phân biệt Dahua & Imou trong LAN..."
             self.discoveredDevices.removeAll()
         }
 
@@ -104,7 +104,7 @@ class LanScanner: ObservableObject {
     }
 
     private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        // Probe Dahua exclusive CGI endpoint first: /cgi-bin/configManager.cgi
+        // Probe 1: Dahua & Imou MagicBox CGI Endpoint
         guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
             completion(nil)
             return
@@ -116,7 +116,6 @@ class LanScanner: ObservableObject {
 
         let task = session.dataTask(with: request) { data, response, error in
             guard let httpRes = response as? HTTPURLResponse else {
-                // Try fallback probing port 80 root if CGI failed
                 self.probeFallbackRoot(ip: ip, session: session, completion: completion)
                 return
             }
@@ -128,35 +127,64 @@ class LanScanner: ObservableObject {
 
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
-            // 1. Exclusive Signature: If /cgi-bin/configManager.cgi returns 401 Unauthorized or 200 OK -> IT IS 100% DAHUA OR IMOU!
+            // If /cgi-bin/configManager.cgi returns 401 or 200 -> It is Dahua or Imou!
             if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") {
-                var brand: CameraBrand = .dahua
-
-                // Check Imou specific signatures
-                if combined.contains("imou") || combined.contains("lechange") ||
-                    combined.contains("ranger") || combined.contains("cruiser") ||
-                    combined.contains("rex") || combined.contains("cue") ||
-                    combined.contains("ipc-a") || combined.contains("ipc-c") ||
-                    combined.contains("ipc-f") || combined.contains("ipc-g") {
-                    brand = .imou
+                // Secondary Probe: Query system info / deviceType to accurately distinguish Imou vs Dahua
+                self.queryDeviceType(ip: ip, session: session, initialCombined: combined) { detectedBrand, modelName in
+                    let device = CameraDevice(
+                        ip: ip,
+                        port: 80,
+                        brand: detectedBrand,
+                        model: modelName,
+                        mac: "",
+                        extraInfo: "CGI Verified (\(detectedBrand.rawValue))"
+                    )
+                    completion(device)
                 }
-
-                let device = CameraDevice(
-                    ip: ip,
-                    port: 80,
-                    brand: brand,
-                    model: "",
-                    mac: "",
-                    extraInfo: "CGI Verified (Dahua/Imou)"
-                )
-                completion(device)
                 return
             }
 
-            // 2. Check other camera signatures (Hikvision ISAPI, UNV, Seetong, etc.)
             self.probeFallbackRoot(ip: ip, session: session, completion: completion)
         }
         task.resume()
+    }
+
+    private func queryDeviceType(ip: String, session: URLSession, initialCombined: String, completion: @escaping (CameraBrand, String) -> Void) {
+        guard let url = URL(string: "http://\(ip):80/cgi-bin/magicBox.cgi?action=getSystemInfo") else {
+            completion(self.determineBrand(text: initialCombined), "")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 1.0
+
+        session.dataTask(with: request) { data, response, _ in
+            let text = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
+            let fullCombined = "\(initialCombined) \(text)"
+
+            let brand = self.determineBrand(text: fullCombined)
+
+            var model = ""
+            if let typeLine = text.components(separatedBy: .newlines).first(where: { $0.contains("devicetype") }) {
+                model = typeLine.components(separatedBy: "=").last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            }
+
+            completion(brand, model)
+        }.resume()
+    }
+
+    private func determineBrand(text: String) -> CameraBrand {
+        let lower = text.lowercased()
+        let isImou = lower.contains("imou") || lower.contains("lechange") ||
+                     lower.contains("ranger") || lower.contains("cruiser") ||
+                     lower.contains("rex") || lower.contains("cue") || lower.contains("verso") ||
+                     lower.contains("ipc-a") || lower.contains("ipc-c") ||
+                     lower.contains("ipc-f") || lower.contains("ipc-g") ||
+                     lower.contains("ipc-k") || lower.contains("ipc-s") ||
+                     lower.contains("ipc-t") || lower.contains("ipc-b")
+
+        return isImou ? .imou : .dahua
     }
 
     private func probeFallbackRoot(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
@@ -181,10 +209,10 @@ class LanScanner: ObservableObject {
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
             var brand: CameraBrand = .unknown
-            if combined.contains("dahua") || combined.contains("web3.0") || combined.contains("web5.0") {
-                brand = .dahua
-            } else if combined.contains("imou") || combined.contains("lechange") {
+            if combined.contains("imou") || combined.contains("lechange") {
                 brand = .imou
+            } else if combined.contains("dahua") || combined.contains("web3.0") || combined.contains("web5.0") {
+                brand = .dahua
             } else if combined.contains("hikvision") || combined.contains("app-web/") {
                 brand = .hikvision
             } else if combined.contains("uniview") || combined.contains("unv") {
@@ -194,7 +222,7 @@ class LanScanner: ObservableObject {
             } else if combined.contains("tiandy") {
                 brand = .tiandy
             } else if httpRes.statusCode == 401 || httpRes.statusCode == 200 {
-                brand = .dahua // Fallback default Dahua CGI compatible camera
+                brand = .dahua
             }
 
             let device = CameraDevice(

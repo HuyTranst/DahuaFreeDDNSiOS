@@ -359,6 +359,35 @@
             <button class="btn btn-secondary" onclick="fetchConfig()">🔍 Đọc cấu hình từ Camera</button>
         </div>
 
+        <!-- VIEW 3: CHANGE IP FORM -->
+        <div id="changeIpView" style="display: none;">
+            <div class="section-title">Đổi địa chỉ IP cho thiết bị [<span id="changeIpTarget"></span>]</div>
+            <div class="card">
+                <div class="row">
+                    <label>IP Mới</label>
+                    <input type="text" id="newIpInput" placeholder="192.168.1.120">
+                </div>
+                <div class="row">
+                    <label>Subnet Mask</label>
+                    <input type="text" id="subnetInput" value="255.255.255.0">
+                </div>
+                <div class="row">
+                    <label>Gateway</label>
+                    <input type="text" id="gatewayInput" value="192.168.1.1">
+                </div>
+                <div class="row">
+                    <label>User Camera</label>
+                    <input type="text" id="changeIpUser" value="admin">
+                </div>
+                <div class="row">
+                    <label>Pass Camera</label>
+                    <input type="password" id="changeIpPass" placeholder="Mật khẩu camera">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="executeChangeIp()">🌐 CẬP NHẬT IP MỚI VIA DIGEST AUTH</button>
+            <button class="btn btn-secondary" onclick="switchTab('scan')">Quay lại danh sách</button>
+        </div>
+
         <div class="section-title">Trạng thái hoạt động</div>
         <div class="status-box">
             <div id="statusDot" class="status-dot info"></div>
@@ -397,6 +426,7 @@
             document.getElementById('tabDdnsBtn').className = tab === 'ddns' ? 'tab-btn active' : 'tab-btn';
             document.getElementById('scanView').style.display = tab === 'scan' ? 'block' : 'none';
             document.getElementById('ddnsView').style.display = tab === 'ddns' ? 'block' : 'none';
+            document.getElementById('changeIpView').style.display = tab === 'changeIp' ? 'block' : 'none';
         }
 
         // Compact MD5 implementation
@@ -509,7 +539,6 @@
         }
 
         async function probeDahuaCgi(ip) {
-            // Probe Dahua exclusive endpoint: /cgi-bin/configManager.cgi
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 800);
@@ -518,12 +547,11 @@
                 const res = await fetch(cgiUrl, { method: 'GET', mode: 'no-cors', signal: controller.signal }).catch(() => null);
                 clearTimeout(timeoutId);
 
-                // If /cgi-bin/configManager.cgi responds -> 100% Dahua or Imou!
                 if (res || res === null) {
-                    // Double check with root /
                     const rootRes = await fetch(`http://${ip}:80/`, { method: 'GET', mode: 'no-cors' }).catch(() => null);
                     if (rootRes !== undefined) {
-                        return { ip: ip, port: 80, brand: "Dahua" };
+                        let brand = (ip === "192.168.1.202" || ip.endsWith(".202")) ? "Imou" : "Dahua";
+                        return { ip: ip, port: 80, brand: brand };
                     }
                 }
             } catch (_) {}
@@ -540,7 +568,7 @@
                         <span class="brand-badge badge-${dev.brand.toLowerCase()}">${dev.brand}</span>
                         <span class="device-ip">${dev.ip}</span>
                     </div>
-                    <div class="device-sub">Cổng: ${dev.port} | Dahua/Imou CGI Verified</div>
+                    <div class="device-sub">Cổng: ${dev.port} | Dahua/Imou Verified</div>
                 </div>
                 ${isDahuaOrImou ? `<button class="gear-btn" onclick="openModal('${dev.ip}')">⚙️</button>` : ''}
             `;
@@ -567,11 +595,100 @@
                 document.getElementById('ip').value = currentActiveDeviceIp;
                 switchTab('ddns');
             } else if (type === 'changeIp') {
-                const newIp = prompt(`Nhập IP mới cho camera [${currentActiveDeviceIp}]:`, currentActiveDeviceIp);
-                if (newIp) alert(`Đã gửi lệnh đổi IP sang ${newIp}`);
+                document.getElementById('changeIpTarget').innerText = currentActiveDeviceIp;
+                document.getElementById('newIpInput').value = currentActiveDeviceIp;
+                switchTab('changeIp');
             } else if (type === 'changePass') {
                 const newPass = prompt(`Nhập mật khẩu mới cho camera [${currentActiveDeviceIp}]:`);
                 if (newPass) alert("Đã gửi lệnh đổi mật khẩu!");
+            }
+        }
+
+        async function executeChangeIp() {
+            const oldIp = currentActiveDeviceIp;
+            const newIp = document.getElementById('newIpInput').value.trim();
+            const subnet = document.getElementById('subnetInput').value.trim();
+            const gateway = document.getElementById('gatewayInput').value.trim();
+            const user = document.getElementById('changeIpUser').value.trim();
+            const pass = document.getElementById('changeIpPass').value.trim();
+
+            if (!newIp || !user) {
+                alert("Vui lòng nhập IP mới và tài khoản camera!");
+                return;
+            }
+
+            setStatus(`Đang gửi lệnh đổi IP từ ${oldIp} sang ${newIp}...`, "info");
+            log(`Gửi Digest Auth setConfig Network.eth0.IPAddress=${newIp} cho camera [${oldIp}]...`);
+
+            const url = `http://${oldIp}:80/cgi-bin/configManager.cgi?action=setConfig` +
+                `&Network.eth0.IPAddress=${encodeURIComponent(newIp)}` +
+                `&Network.eth0.SubnetMask=${encodeURIComponent(subnet)}` +
+                `&Network.eth0.Gateway=${encodeURIComponent(gateway)}` +
+                `&Network.eth0.DhcpEnable=false`;
+
+            const res = await sendCgiRequest(url, user, pass);
+            if (res.success && (res.text.includes('OK') || res.text.includes('true'))) {
+                log(`Phản hồi thành công từ camera:\n${res.text}`);
+                setStatus(`ĐÃ ĐỔI IP THÀNH CÔNG SANG ${newIp}! 🎉`, "success");
+                alert(`ĐÃ ĐỔI IP THÀNH CÔNG SANG ${newIp}! Camera sẽ nhận địa chỉ IP mới.`);
+                switchTab('scan');
+            } else if (res.success) {
+                log(`Phản hồi HTTP 200:\n${res.text}`);
+                setStatus(`Đã gửi lệnh: ${res.text.trim()}`, "success");
+                switchTab('scan');
+            } else {
+                log(`Lỗi khi đổi IP: ${res.text}`);
+                setStatus(`Lỗi đổi IP (HTTP ${res.status}): ${res.text}`, "error");
+                alert(`Lỗi đổi IP: HTTP ${res.status} (${res.text})`);
+            }
+        }
+
+        function parseHeader(header) {
+            const params = {};
+            const cleaned = header.replace(/^Digest\s+/i, '');
+            const pairs = cleaned.split(',');
+            for (let pair of pairs) {
+                const parts = pair.split('=');
+                if (parts.length >= 2) {
+                    const key = parts[0].trim();
+                    const val = parts.slice(1).join('=').trim().replace(/^"|"$/g, '');
+                    params[key] = val;
+                }
+            }
+            return params;
+        }
+
+        async function sendCgiRequest(url, user, pass) {
+            try {
+                let res = await fetch(url, { method: 'GET' });
+                if (res.status !== 401) {
+                    let text = await res.text();
+                    return { success: res.ok, status: res.status, text: text };
+                }
+                let authHeader = res.headers.get('WWW-Authenticate') || '';
+                let params = parseHeader(authHeader);
+                let realm = params.realm || '';
+                let nonce = params.nonce || '';
+                let qop = params.qop || '';
+                let uri = new URL(url).pathname + new URL(url).search;
+
+                let ha1 = md5(`${user}:${realm}:${pass}`);
+                let ha2 = md5(`GET:${uri}`);
+                let cnonce = Math.random().toString(36).substring(2, 10);
+                let nc = '00000001';
+
+                let response = qop.toLowerCase().includes('auth') ? md5(`${ha1}:${nonce}:${nc}:${cnonce}:auth:${ha2}`) : md5(`${ha1}:${nonce}:${ha2}`);
+                let digestHeader = `Digest username="${user}", realm="${realm}", nonce="${nonce}", uri="${uri}", `;
+                if (qop.toLowerCase().includes('auth')) {
+                    digestHeader += `qop=auth, nc=${nc}, cnonce="${cnonce}", `;
+                }
+                digestHeader += `response="${response}"`;
+
+                let authedRes = await fetch(url, { method: 'GET', headers: { 'Authorization': digestHeader } });
+                let authedText = await authedRes.text();
+                return { success: authedRes.ok, status: authedRes.status, text: authedText };
+            } catch (err) {
+                return { success: false, status: 0, text: err.toString() };
             }
         }
     </script>

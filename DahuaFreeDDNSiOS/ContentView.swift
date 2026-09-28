@@ -51,11 +51,10 @@ struct ContentView: View {
     @State private var isLoading: Bool = false
     @State private var statusMessage: String = "Sẵn sàng kết nối tới camera Dahua/Imou."
     @State private var statusType: StatusType = .info
-    @State private var logHistory: String = "Ứng dụng Dahua & Imou DDNS iOS đã sẵn sàng.\n"
+    @State private var logHistory: String = "Ứng dụng Dahua & Imou Manager iOS đã sẵn sàng.\n"
     @State private var rawFetchedConfig: String = ""
 
     private let cgiClient = DahuaCgiClient()
-    private let configManager = CameraConfigManager()
 
     enum StatusType {
         case info, success, error
@@ -97,7 +96,7 @@ struct ContentView: View {
             .actionSheet(isPresented: $showActionSheet) {
                 ActionSheet(
                     title: Text("Thao tác thiết bị [\(activeDevice?.ip ?? "")]"),
-                    message: Text("Loại thiết bị: \(activeDevice?.brand.rawValue ?? "Camera")"),
+                    message: Text("Hãng: \(activeDevice?.brand.rawValue ?? "Camera")"),
                     buttons: [
                         .default(Text("⚙️ Cài Đặt Free DDNS")) {
                             if let dev = activeDevice {
@@ -168,10 +167,9 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         if scanner.isScanning {
-                            ProgressView()
-                                .padding(.trailing, 8)
+                            ProgressView().padding(.trailing, 8)
                         } else {
-                            Image(systemName: "line.horizontal.3.decrease.circle.fill")
+                            Image(systemName: "arrow.triangle.2.circlepath")
                         }
                         Text(scanner.isScanning ? "ĐANG QUÉT MẠNG LAN..." : "BẮT ĐẦU QUÉT IP CAMERA")
                             .bold()
@@ -251,7 +249,7 @@ struct ContentView: View {
     // TAB 2: DDNS Form View
     var ddnsFormView: some View {
         Form {
-            Section(header: Text("Thông tin Camera / Đầu ghi Dahua & Imou")) {
+            Section(header: Text("Thông tin Camera Dahua & Imou")) {
                 HStack {
                     Image(systemName: "network").foregroundColor(.blue)
                     TextField("Địa chỉ IP (192.168.1.108)", text: $ip)
@@ -374,13 +372,20 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         Image(systemName: "network")
-                        Text("CẬP NHẬT IP MỚI").bold()
+                        Text("CẬP NHẬT IP MỚI VIA DIGEST AUTH").bold()
                         Spacer()
                     }
                     .foregroundColor(.white)
                     .padding(.vertical, 8)
                     .background(Color.blue)
                     .cornerRadius(8)
+                }
+            }
+
+            Section(header: Text("Trạng thái")) {
+                HStack {
+                    Circle().fill(statusType.color).frame(width: 10, height: 10)
+                    Text(statusMessage).font(.subheadline).foregroundColor(statusType.color)
                 }
             }
         }
@@ -422,6 +427,13 @@ struct ContentView: View {
                     .cornerRadius(8)
                 }
             }
+
+            Section(header: Text("Trạng thái")) {
+                HStack {
+                    Circle().fill(statusType.color).frame(width: 10, height: 10)
+                    Text(statusMessage).font(.subheadline).foregroundColor(statusType.color)
+                }
+            }
         }
     }
 
@@ -439,38 +451,71 @@ struct ContentView: View {
     }
 
     private func executeChangeIp() {
-        if newIp.isEmpty || camUser.isEmpty {
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanNewIp = newIp.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanNewIp.isEmpty || cleanUser.isEmpty {
             setStatus("Vui lòng nhập IP mới và tài khoản camera!", type: .error)
             return
         }
-        setStatus("Đang gửi lệnh đổi IP sang \(newIp)...", type: .info)
-        configManager.changeIp(ip: ip, port: port, user: camUser, pass: camPass, newIp: newIp, subnet: subnetMask, gateway: gateway) { result in
+        setStatus("Đang gửi lệnh đổi IP sang \(cleanNewIp)...", type: .info)
+
+        cgiClient.changeIp(
+            ip: cleanIp,
+            port: port,
+            user: cleanUser,
+            pass: camPass,
+            newIp: cleanNewIp,
+            subnet: subnetMask,
+            gateway: gateway
+        ) { result in
             DispatchQueue.main.async {
-                if result.success {
-                    self.setStatus("Đã đổi IP thành công sang \(self.newIp)! 🎉", type: .success)
-                    self.ip = self.newIp
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
+                    self.setStatus("Đã đổi IP thành công sang \(cleanNewIp)! 🎉", type: .success)
+                    self.appendLog("Đã đổi IP từ \(cleanIp) sang \(cleanNewIp). Camera sẽ nhận IP mới!")
+                    self.ip = cleanNewIp
+                    self.activeModalType = nil
+                } else if result.success {
+                    self.setStatus("Phản hồi camera: \(result.rawText)", type: .success)
+                    self.ip = cleanNewIp
                     self.activeModalType = nil
                 } else {
-                    self.setStatus("Lỗi đổi IP: \(result.errorMessage ?? result.rawText)", type: .error)
+                    let err = "Lỗi đổi IP: HTTP \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    self.setStatus(err, type: .error)
+                    self.appendLog(err)
                 }
             }
         }
     }
 
     private func executeChangePassword() {
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+
         if newPass.isEmpty || newPass != confirmPass {
             setStatus("Mật khẩu mới không trùng khớp!", type: .error)
             return
         }
         setStatus("Đang gửi lệnh đổi mật khẩu...", type: .info)
-        configManager.changePassword(ip: ip, port: port, user: camUser, oldPass: oldPass, newPass: newPass) { result in
+
+        cgiClient.changePassword(
+            ip: cleanIp,
+            port: port,
+            user: cleanUser,
+            oldPass: oldPass,
+            newPass: newPass
+        ) { result in
             DispatchQueue.main.async {
-                if result.success {
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
                     self.setStatus("Đã đổi mật khẩu thành công! 🎉", type: .success)
+                    self.appendLog("Đã đổi mật khẩu camera [\(cleanIp)] thành công!")
                     self.camPass = self.newPass
                     self.activeModalType = nil
                 } else {
-                    self.setStatus("Lỗi đổi mật khẩu: \(result.errorMessage ?? result.rawText)", type: .error)
+                    let err = "Lỗi đổi mật khẩu: HTTP \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    self.setStatus(err, type: .error)
+                    self.appendLog(err)
                 }
             }
         }

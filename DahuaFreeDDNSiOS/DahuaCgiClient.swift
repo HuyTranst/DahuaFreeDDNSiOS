@@ -58,6 +58,39 @@ class DahuaCgiClient {
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
 
+    func changeIp(
+        ip: String,
+        port: String,
+        user: String,
+        pass: String,
+        newIp: String,
+        subnet: String = "255.255.255.0",
+        gateway: String = "192.168.1.1",
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig" +
+                        "&Network.eth0.IPAddress=\(newIp)" +
+                        "&Network.eth0.SubnetMask=\(subnet)" +
+                        "&Network.eth0.Gateway=\(gateway)" +
+                        "&Network.eth0.DhcpEnable=false"
+
+        executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    func changePassword(
+        ip: String,
+        port: String,
+        user: String,
+        oldPass: String,
+        newPass: String,
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        let urlString = "http://\(ip):\(port)/cgi-bin/userManager.cgi?action=modifyPassword" +
+                        "&name=\(user)&pwd=\(oldPass)&newpwd=\(newPass)"
+
+        executeWithAuth(urlString: urlString, user: user, pass: oldPass, completion: completion)
+    }
+
     private func executeWithAuth(
         urlString: String,
         user: String,
