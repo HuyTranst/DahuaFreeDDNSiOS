@@ -40,11 +40,17 @@ def create_ipa():
         ])
         f.write(macho_header)
 
-    # 4. Copy Swift source files into bundle for reference/sideloading inspection
+    # 4. Copy Swift source files & PNG logo images into bundle
     src_dir = os.path.join(project_dir, "DahuaFreeDDNSiOS")
     for item in os.listdir(src_dir):
         if item.endswith(".swift"):
             shutil.copyfile(os.path.join(src_dir, item), os.path.join(app_dir, item))
+
+    if os.path.exists(os.path.join(project_dir, "logo.png")):
+        shutil.copyfile(os.path.join(project_dir, "logo.png"), os.path.join(app_dir, "logo.png"))
+    if os.path.exists(os.path.join(project_dir, "camera_logo.png")):
+        shutil.copyfile(os.path.join(project_dir, "camera_logo.png"), os.path.join(app_dir, "camera_logo.png"))
+
 
     # 5. Create .ipa zip archive
     if os.path.exists(output_ipa):

@@ -826,6 +826,15 @@ struct CameraLogoIcon: View {
     let brand: CameraBrand
 
     static let logoImage: UIImage? = {
+        let bundlePath = Bundle.main.bundlePath
+        let logoPath = (bundlePath as NSString).appendingPathComponent("logo.png")
+        if FileManager.default.fileExists(atPath: logoPath), let img = UIImage(contentsOfFile: logoPath) {
+            return img
+        }
+        let cameraLogoPath = (bundlePath as NSString).appendingPathComponent("camera_logo.png")
+        if FileManager.default.fileExists(atPath: cameraLogoPath), let img = UIImage(contentsOfFile: cameraLogoPath) {
+            return img
+        }
         if let path = Bundle.main.path(forResource: "logo", ofType: "png") ?? Bundle.main.path(forResource: "camera_logo", ofType: "png"),
            let uiImage = UIImage(contentsOfFile: path) {
             return uiImage
@@ -833,12 +842,9 @@ struct CameraLogoIcon: View {
         if let uiImage = UIImage(named: "logo") ?? UIImage(named: "camera_logo") {
             return uiImage
         }
-        if let data = Data(base64Encoded: cameraLogoBase64String),
-           let uiImage = UIImage(data: data) {
-            return uiImage
-        }
         return nil
     }()
+
 
     var body: some View {
         if let uiImage = CameraLogoIcon.logoImage {
