@@ -32,7 +32,15 @@ jobs:
           swiftc -target arm64-apple-ios15.0 \
                  -sdk "$SDK_PATH" \
                  -parse-as-library \
-                 src_tmp/*.swift \
+                 -framework Foundation \
+                 -framework SwiftUI \
+                 -framework UIKit \
+                 -framework AVFoundation \
+                 -framework CoreImage \
+                 src_tmp/ContentView.swift \
+                 src_tmp/DahuaCgiClient.swift \
+                 src_tmp/LanScanner.swift \
+                 src_tmp/DahuaFreeDDNSApp.swift \
                  -o DahuaFreeDDNS
 
           echo "=== Packaging IPA Bundle ==="
@@ -47,11 +55,14 @@ jobs:
           fi
 
           echo "APPL????" > Payload/DahuaFreeDDNS.app/PkgInfo
+          if [ -f "logo.png" ]; then
+            cp logo.png Payload/DahuaFreeDDNS.app/logo.png
+            cp logo.png Payload/DahuaFreeDDNS.app/AppIcon60x60@2x.png
+            cp logo.png Payload/DahuaFreeDDNS.app/AppIcon76x76@2x.png
+            cp logo.png Payload/DahuaFreeDDNS.app/AppIcon.png
+          fi
           if [ -f "camera_logo.png" ]; then
             cp camera_logo.png Payload/DahuaFreeDDNS.app/
-          fi
-          if [ -f "logo.png" ]; then
-            cp logo.png Payload/DahuaFreeDDNS.app/
           fi
           zip -r DahuaFreeDDNS-Real.ipa Payload
 
@@ -67,14 +78,12 @@ jobs:
           tag_name: "v1.0.0"
           name: "Dahua & Imou Manager iOS v1.0.0"
           body: |
-            🚀 **Bản IPA cài đặt chính thức cho iPhone / iPad (Tốc độ tải cực nhanh từ GitHub Release)**
+            📱 **Bản IPA cài đặt chính thức cho iPhone / iPad (Tốc độ tải cực nhanh từ GitHub Release)**
             
-            - 📱 **Giao diện Menu 5 mục bên dưới (Trang chủ, Sản phẩm, Quét LAN, Dễ Cấu Hình, Tôi)**
-            - 🖼️ **Logo PNG nhúng Base64 sắc nét nguyên bản 100%**
-            - 🔵 **Số Seri (S/N) hiển thị màu xanh dương nổi bật**
-            - ⚡ **Tự động điền Form cấu hình Free DDNS**
-            
-            👉 **Tải trực tiếp file `DahuaFreeDDNS-Real.ipa` bên dưới để cài đặt nhanh chóng!**
+            - ⚙️ **Giao diện Menu 5 mục bên dưới (Trang chủ, Sản phẩm, Quét LAN, Dễ Cấu Hình, Tôi)**
+            - 🔍 **Check bảo hành S/N, Check Port, Super Password, Set Date/NTP, Reboot Camera**
+            - 🖼️ **Logo PNG nhúng sắc nét nguyên bản 100%**
+            - 🚀 **Tải trực tiếp file `DahuaFreeDDNS-Real.ipa` bên dưới để cài đặt nhanh chóng!**
           files: DahuaFreeDDNS-Real.ipa
           draft: false
           prerelease: false
