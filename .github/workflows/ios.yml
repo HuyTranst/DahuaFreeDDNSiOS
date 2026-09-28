@@ -12,64 +12,75 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode Version
+      - name: Compile Swift directly to iOS ARM64 Binary
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode_15.2.app || true
-          xcodebuild -version
+          echo "=== Locating Swift Files ==="
+          SWIFT_FILES=$(find . -name "*.swift" -type f | tr '\n' ' ')
+          echo "Found Swift files: $SWIFT_FILES"
 
-      - name: Find Project & Build iOS App
-        run: |
-          PROJ_PATH=$(find . -name "DahuaFreeDDNSiOS.xcodeproj" -type d | head -n 1)
-          if [ -z "$PROJ_PATH" ]; then
-            echo "Error: DahuaFreeDDNSiOS.xcodeproj not found!"
+          if [ -z "$SWIFT_FILES" ]; then
+            echo "Error: No Swift files found!"
             exit 1
           fi
-          PROJ_DIR=$(dirname "$PROJ_PATH")
-          echo "Found project directory at: $PROJ_DIR"
-          cd "$PROJ_DIR"
 
-          # Ensure swift files exist in current directory and DahuaFreeDDNSiOS subfolder
-          mkdir -p DahuaFreeDDNSiOS
-          for file in DahuaFreeDDNSApp.swift ContentView.swift DahuaCgiClient.swift; do
-            FOUND_FILE=$(find . -name "$file" -type f | head -n 1)
-            if [ -n "$FOUND_FILE" ]; then
-              cp "$FOUND_FILE" .
-              cp "$FOUND_FILE" DahuaFreeDDNSiOS/
-            fi
-          done
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          echo "Using iOS SDK at: $SDK_PATH"
 
-          echo "=== Directory contents before build ==="
-          ls -la
-          ls -la DahuaFreeDDNSiOS || true
+          echo "=== Compiling with Swiftc ==="
+          swiftc -target arm64-apple-ios15.0 \
+                 -sdk "$SDK_PATH" \
+                 -parse-as-library \
+                 $SWIFT_FILES \
+                 -o DahuaFreeDDNS
 
-          # Run xcodebuild and capture full log if error occurs
-          set +e
-          xcodebuild -project DahuaFreeDDNSiOS.xcodeproj \
-                     -target DahuaFreeDDNSiOS \
-                     -configuration Release \
-                     -sdk iphoneos \
-                     -derivedDataPath build \
-                     CODE_SIGNING_ALLOWED=NO \
-                     CODE_SIGN_IDENTITY="" \
-                     CODE_SIGNING_REQUIRED=NO \
-                     AD_HOC_CODE_SIGNING_ALLOWED=YES > xcodebuild.log 2>&1
-          
-          BUILD_STATUS=$?
-          cat xcodebuild.log
+          echo "=== Packaging IPA Bundle ==="
+          mkdir -p Payload/DahuaFreeDDNS.app
 
-          if [ $BUILD_STATUS -ne 0 ]; then
-            echo "xcodebuild failed with exit code $BUILD_STATUS"
-            exit $BUILD_STATUS
+          mv DahuaFreeDDNS Payload/DahuaFreeDDNS.app/
+
+          # Copy Info.plist if available, or generate a valid Info.plist
+          PLIST_FILE=$(find . -name "Info.plist" -type f | head -n 1)
+          if [ -n "$PLIST_FILE" ]; then
+            cp "$PLIST_FILE" Payload/DahuaFreeDDNS.app/Info.plist
+          else
+            cat << 'EOF' > Payload/DahuaFreeDDNS.app/Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>DahuaFreeDDNS</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.dahua.freeddns.ios</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>DahuaFreeDDNS</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
+EOF
           fi
 
-          mkdir -p Payload
-          APP_PATH=$(find build -name "*.app" -type d | head -n 1)
-          echo "Copying app from: $APP_PATH"
-          cp -R "$APP_PATH" Payload/
+          echo "APPL????" > Payload/DahuaFreeDDNS.app/PkgInfo
           zip -r DahuaFreeDDNS-Real.ipa Payload
 
       - name: Upload Compiled IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DahuaFreeDDNS-Real-IPA
-          path: "**/DahuaFreeDDNS-Real.ipa"
+          path: DahuaFreeDDNS-Real.ipa
