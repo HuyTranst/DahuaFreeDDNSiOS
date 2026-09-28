@@ -15,22 +15,22 @@ let freeDdnsPresets: [DdnsPreset] = [
     DdnsPreset(name: "Tùy chỉnh (Custom)", server: "")
 ]
 
-struct CameraProduct: Identifiable {
+struct CameraProductItem: Identifiable {
     let id = UUID()
     let name: String
     let brand: String
     let desc: String
     let iconName: String
-    let badgeColor: Color
+    let isImou: Bool
 }
 
-let sampleProducts: [CameraProduct] = [
-    CameraProduct(name: "Imou Ranger 2 (IPC-A22EP)", brand: "Imou", desc: "Camera Wi-Fi quay quét 360°, AI phát hiện người, Smart Tracking 1080P/2K", iconName: "video.fill", badgeColor: .orange),
-    CameraProduct(name: "Imou Cruiser (IPC-S22FP)", brand: "Imou", desc: "Camera ngoài trời xoay 360°, có màu ban đêm Full Color, còi báo động", iconName: "video.circle.fill", badgeColor: .orange),
-    CameraProduct(name: "Imou Rex (IPC-A32EP)", brand: "Imou", desc: "Camera cao cấp dạng quả cầu, ẩn ống kính riêng tư, đàm thoại 2 chiều", iconName: "video.square.fill", badgeColor: .orange),
-    CameraProduct(name: "Dahua IPC-HFW1230S", brand: "Dahua", desc: "Camera Thân hồng ngoại 30m, IP67 chống nước ngoài trời, H.265+", iconName: "video.badge.plus", badgeColor: .red),
-    CameraProduct(name: "Dahua IPC-HDW1230T-S4", brand: "Dahua", desc: "Camera Eyeball bán cầu góc rộng, vỏ kim loại chắc chắn, PoE", iconName: "video.fill.badge.plus", badgeColor: .red),
-    CameraProduct(name: "Dahua NVR4104HS-4KS2", brand: "Dahua", desc: "Đầu ghi hình IP NVR 4 kênh chuẩn 4K, băng thông 80Mbps, Free DDNS", iconName: "server.rack", badgeColor: .red)
+let sampleProducts: [CameraProductItem] = [
+    CameraProductItem(name: "Imou Ranger 2 (IPC-A22EP)", brand: "Imou", desc: "Camera Wi-Fi quay quét 360°, AI phát hiện người, Smart Tracking 1080P/2K", iconName: "video.fill", isImou: true),
+    CameraProductItem(name: "Imou Cruiser (IPC-S22FP)", brand: "Imou", desc: "Camera ngoài trời xoay 360°, có màu ban đêm Full Color, còi báo động", iconName: "video.circle.fill", isImou: true),
+    CameraProductItem(name: "Imou Rex (IPC-A32EP)", brand: "Imou", desc: "Camera cao cấp dạng quả cầu, ẩn ống kính riêng tư, đàm thoại 2 chiều", iconName: "video.square.fill", isImou: true),
+    CameraProductItem(name: "Dahua IPC-HFW1230S", brand: "Dahua", desc: "Camera Thân hồng ngoại 30m, IP67 chống nước ngoài trời, H.265+", iconName: "video.badge.plus", isImou: false),
+    CameraProductItem(name: "Dahua IPC-HDW1230T-S4", brand: "Dahua", desc: "Camera Eyeball bán cầu góc rộng, vỏ kim loại chắc chắn, PoE", iconName: "video.fill.badge.plus", isImou: false),
+    CameraProductItem(name: "Dahua NVR4104HS-4KS2", brand: "Dahua", desc: "Đầu ghi hình IP NVR 4 kênh chuẩn 4K, băng thông 80Mbps, Free DDNS", iconName: "server.rack", isImou: false)
 ]
 
 struct ContentView: View {
@@ -96,7 +96,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // TAB 1: Trang chủ (Quét LAN)
+            // TAB 0: Trang chủ
             NavigationView {
                 scanView
                     .navigationTitle("Trang chủ")
@@ -107,7 +107,7 @@ struct ContentView: View {
             }
             .tag(0)
 
-            // TAB 2: Sản phẩm
+            // TAB 1: Sản phẩm
             NavigationView {
                 productsView
                     .navigationTitle("Sản phẩm")
@@ -118,7 +118,7 @@ struct ContentView: View {
             }
             .tag(1)
 
-            // TAB 3: Quét Mạng (Nút Cam Trung Tâm)
+            // TAB 2: Quét LAN (Nút Giữa)
             NavigationView {
                 quickScanCenterView
                     .navigationTitle("Quét LAN Camera")
@@ -129,7 +129,7 @@ struct ContentView: View {
             }
             .tag(2)
 
-            // TAB 4: Dễ Cấu Hình
+            // TAB 3: Dễ Cấu Hình
             NavigationView {
                 ddnsFormView
                     .navigationTitle("Dễ Cấu Hình")
@@ -140,7 +140,7 @@ struct ContentView: View {
             }
             .tag(3)
 
-            // TAB 5: Tôi (Cá nhân & Log)
+            // TAB 4: Tôi
             NavigationView {
                 profileView
                     .navigationTitle("Tôi")
@@ -217,7 +217,7 @@ struct ContentView: View {
         }
     }
 
-    // TAB 1: Scan LAN View
+    // TAB 0: Scan LAN View
     var scanView: some View {
         List {
             Section {
@@ -312,7 +312,7 @@ struct ContentView: View {
         .listStyle(GroupedListStyle())
     }
 
-    // TAB 2: Products Showcase View
+    // TAB 1: Products View
     var productsView: some View {
         List {
             Section(header: Text("Thiết bị Camera Dahua & Imou Nổi Bật")) {
@@ -320,11 +320,11 @@ struct ContentView: View {
                     HStack(spacing: 12) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(prod.badgeColor.opacity(0.15))
+                                .fill((prod.isImou ? Color.orange : Color.red).opacity(0.15))
                                 .frame(width: 50, height: 50)
                             Image(systemName: prod.iconName)
                                 .font(.title2)
-                                .foregroundColor(prod.badgeColor)
+                                .foregroundColor(prod.isImou ? .orange : .red)
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
@@ -337,7 +337,7 @@ struct ContentView: View {
                                     .bold()
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(prod.badgeColor)
+                                    .background(prod.isImou ? Color.orange : Color.red)
                                     .foregroundColor(.white)
                                     .cornerRadius(4)
                             }
@@ -355,7 +355,7 @@ struct ContentView: View {
         .listStyle(GroupedListStyle())
     }
 
-    // TAB 3: Quick Scan Center View
+    // TAB 2: Quick Scan Center View
     var quickScanCenterView: some View {
         VStack(spacing: 24) {
             Spacer()
@@ -414,7 +414,7 @@ struct ContentView: View {
         }
     }
 
-    // TAB 4: Set Free DDNS Form View
+    // TAB 3: DDNS Form View
     var ddnsFormView: some View {
         Form {
             Section(header: Text("Thông tin Camera Dahua / Imou")) {
@@ -470,7 +470,6 @@ struct ContentView: View {
                         Text(freeDdnsPresets[idx].name).tag(idx)
                     }
                 }
-
 
                 HStack {
                     Text("Server DDNS")
@@ -543,7 +542,7 @@ struct ContentView: View {
         }
     }
 
-    // TAB 5: Profile & System Logs View
+    // TAB 4: Profile View
     var profileView: some View {
         List {
             Section {
@@ -570,7 +569,6 @@ struct ContentView: View {
                 ScrollView {
                     Text(logHistory)
                         .font(.caption2)
-                        .fontDesign(.monospaced)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
                         .background(Color.black.opacity(0.05))
@@ -848,7 +846,6 @@ struct CameraLogoIcon: View {
         }
         return nil
     }()
-
 
     var body: some View {
         if let uiImage = CameraLogoIcon.logoImage {
