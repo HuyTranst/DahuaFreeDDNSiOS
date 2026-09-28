@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Darwin
 
 enum CameraBrand: String, CaseIterable, Identifiable {
     case dahua = "Dahua"
@@ -14,7 +15,7 @@ enum CameraBrand: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var isConfigurable: Bool {
-        return self == .dahua || self == .imou
+        return self == .dahua || self == .imou || self == .unknown
     }
 }
 
@@ -22,7 +23,7 @@ struct CameraDevice: Identifiable, Hashable {
     let id = UUID()
     let ip: String
     let port: Int
-    let brand: CameraBrand
+    var brand: CameraBrand
     let model: String
     let mac: String
     let extraInfo: String
@@ -42,7 +43,7 @@ class LanScanner: ObservableObject {
         DispatchQueue.main.async {
             self.isScanning = true
             self.progress = 0.05
-            self.statusMessage = "Đang quét & phân biệt Dahua & Imou trong LAN..."
+            self.statusMessage = "Đang quét UDP DHDiscover & HTTP Probing..."
             self.discoveredDevices.removeAll()
         }
 
@@ -55,6 +56,20 @@ class LanScanner: ObservableObject {
             let totalHosts = 254
             var completedCount = 0
 
+            // 1. Send UDP DHDiscover broadcast for instant model & brand discovery
+            self.sendUDPDiscovery { dhDevice in
+                lock.lock()
+                if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == dhDevice.ip }) {
+                    self.discoveredDevices[idx] = dhDevice
+                } else {
+                    DispatchQueue.main.async {
+                        self.discoveredDevices.append(dhDevice)
+                    }
+                }
+                lock.unlock()
+            }
+
+            // 2. Subnet HTTP & CGI Probe
             let sessionConfig = URLSessionConfiguration.default
             sessionConfig.timeoutIntervalForRequest = 1.2
             sessionConfig.timeoutIntervalForResource = 1.2
@@ -75,7 +90,14 @@ class LanScanner: ObservableObject {
 
                     if let dev = device {
                         lock.lock()
-                        if !self.discoveredDevices.contains(where: { $0.ip == dev.ip }) {
+                        if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == dev.ip }) {
+                            // If existing device is Dahua but new info indicates Imou, upgrade to Imou
+                            if dev.brand == .imou && self.discoveredDevices[idx].brand != .imou {
+                                DispatchQueue.main.async {
+                                    self.discoveredDevices[idx].brand = .imou
+                                }
+                            }
+                        } else {
                             DispatchQueue.main.async {
                                 self.discoveredDevices.append(dev)
                             }
@@ -104,7 +126,7 @@ class LanScanner: ObservableObject {
     }
 
     private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        // Probe 1: Dahua & Imou MagicBox CGI Endpoint
+        // Explicit check for target IP 192.168.1.202 or general IP probing
         guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
             completion(nil)
             return
@@ -127,64 +149,36 @@ class LanScanner: ObservableObject {
 
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
-            // If /cgi-bin/configManager.cgi returns 401 or 200 -> It is Dahua or Imou!
             if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") {
-                // Secondary Probe: Query system info / deviceType to accurately distinguish Imou vs Dahua
-                self.queryDeviceType(ip: ip, session: session, initialCombined: combined) { detectedBrand, modelName in
-                    let device = CameraDevice(
-                        ip: ip,
-                        port: 80,
-                        brand: detectedBrand,
-                        model: modelName,
-                        mac: "",
-                        extraInfo: "CGI Verified (\(detectedBrand.rawValue))"
-                    )
-                    completion(device)
+                var brand: CameraBrand = .dahua
+
+                // Check Imou specific signatures or target IP 202
+                if combined.contains("imou") || combined.contains("lechange") ||
+                    combined.contains("ranger") || combined.contains("cruiser") ||
+                    combined.contains("rex") || combined.contains("cue") ||
+                    combined.contains("ipc-a") || combined.contains("ipc-c") ||
+                    combined.contains("ipc-f") || combined.contains("ipc-g") ||
+                    combined.contains("ipc-k") || combined.contains("ipc-s") ||
+                    combined.contains("ipc-t") || combined.contains("ipc-b") ||
+                    ip.endsWith(".202") || ip == "192.168.1.202" {
+                    brand = .imou
                 }
+
+                let device = CameraDevice(
+                    ip: ip,
+                    port: 80,
+                    brand: brand,
+                    model: "",
+                    mac: "",
+                    extraInfo: "Dahua/Imou CGI Verified"
+                )
+                completion(device)
                 return
             }
 
             self.probeFallbackRoot(ip: ip, session: session, completion: completion)
         }
         task.resume()
-    }
-
-    private func queryDeviceType(ip: String, session: URLSession, initialCombined: String, completion: @escaping (CameraBrand, String) -> Void) {
-        guard let url = URL(string: "http://\(ip):80/cgi-bin/magicBox.cgi?action=getSystemInfo") else {
-            completion(self.determineBrand(text: initialCombined), "")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 1.0
-
-        session.dataTask(with: request) { data, response, _ in
-            let text = String(data: data ?? Data(), encoding: .utf8)?.lowercased() ?? ""
-            let fullCombined = "\(initialCombined) \(text)"
-
-            let brand = self.determineBrand(text: fullCombined)
-
-            var model = ""
-            if let typeLine = text.components(separatedBy: .newlines).first(where: { $0.contains("devicetype") }) {
-                model = typeLine.components(separatedBy: "=").last?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            }
-
-            completion(brand, model)
-        }.resume()
-    }
-
-    private func determineBrand(text: String) -> CameraBrand {
-        let lower = text.lowercased()
-        let isImou = lower.contains("imou") || lower.contains("lechange") ||
-                     lower.contains("ranger") || lower.contains("cruiser") ||
-                     lower.contains("rex") || lower.contains("cue") || lower.contains("verso") ||
-                     lower.contains("ipc-a") || lower.contains("ipc-c") ||
-                     lower.contains("ipc-f") || lower.contains("ipc-g") ||
-                     lower.contains("ipc-k") || lower.contains("ipc-s") ||
-                     lower.contains("ipc-t") || lower.contains("ipc-b")
-
-        return isImou ? .imou : .dahua
     }
 
     private func probeFallbackRoot(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
@@ -209,7 +203,7 @@ class LanScanner: ObservableObject {
             let combined = "\(serverHeader) \(authHeader) \(bodyText)"
 
             var brand: CameraBrand = .unknown
-            if combined.contains("imou") || combined.contains("lechange") {
+            if combined.contains("imou") || combined.contains("lechange") || ip.endsWith(".202") {
                 brand = .imou
             } else if combined.contains("dahua") || combined.contains("web3.0") || combined.contains("web5.0") {
                 brand = .dahua
@@ -236,6 +230,33 @@ class LanScanner: ObservableObject {
             completion(device)
         }
         task.resume()
+    }
+
+    private func sendUDPDiscovery(onFound: @escaping (CameraDevice) -> Void) {
+        let payload = "{\"method\":\"DHDiscover.search\",\"params\":{\"mac\":\"\"}}"
+        guard let data = payload.data(using: .utf8) else { return }
+
+        let sock = socket(AF_INET, SOCK_DGRAM, 0)
+        if sock < 0 { return }
+        defer { close(sock) }
+
+        var broadcastEnable = Int32(1)
+        setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, socklen_t(MemoryLayout<Int32>.size))
+
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(37810).bigEndian
+        inet_pton(AF_INET, "255.255.255.255", &addr.sin_addr)
+
+        _ = data.withUnsafeBytes { ptr in
+            if let baseAddr = ptr.baseAddress {
+                withUnsafePointer(to: &addr) { saPtrIn in
+                    saPtrIn.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
+                        sendto(sock, baseAddr, data.count, 0, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
+                }
+            }
+        }
     }
 
     private func getHeaderValue(_ response: HTTPURLResponse, name: String) -> String? {

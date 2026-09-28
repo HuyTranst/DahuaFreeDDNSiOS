@@ -199,18 +199,28 @@ struct ContentView: View {
                         .foregroundColor(.secondary)
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(scanner.discoveredDevices) { dev in
+                    ForEach(0..<scanner.discoveredDevices.count, id: \.self) { idx in
+                        let dev = scanner.discoveredDevices[idx]
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
-                                    Text(dev.brand.rawValue)
-                                        .font(.caption)
-                                        .bold()
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .background(badgeColor(for: dev.brand))
-                                        .foregroundColor(.white)
-                                        .cornerRadius(6)
+                                    Button(action: {
+                                        // Tap badge to toggle brand between Dahua and Imou
+                                        if scanner.discoveredDevices[idx].brand == .dahua {
+                                            scanner.discoveredDevices[idx].brand = .imou
+                                        } else if scanner.discoveredDevices[idx].brand == .imou {
+                                            scanner.discoveredDevices[idx].brand = .dahua
+                                        }
+                                    }) {
+                                        Text(dev.brand.rawValue)
+                                            .font(.caption)
+                                            .bold()
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 2)
+                                            .background(badgeColor(for: dev.brand))
+                                            .foregroundColor(.white)
+                                            .cornerRadius(6)
+                                    }
 
                                     Text(dev.ip)
                                         .font(.headline)
@@ -225,7 +235,7 @@ struct ContentView: View {
 
                             Spacer()
 
-                            // Display Gear/Settings icon ONLY for Dahua and Imou
+                            // Display Gear/Settings icon for Dahua, Imou & IP Camera
                             if dev.brand.isConfigurable {
                                 Button(action: {
                                     self.activeDevice = dev

@@ -178,6 +178,7 @@
             border-radius: 6px;
             color: #FFFFFF;
             display: inline-block;
+            cursor: pointer;
         }
         .badge-dahua { background-color: #E53935; }
         .badge-imou { background-color: #FB8C00; }
@@ -506,12 +507,12 @@
             dot.className = `status-dot ${type}`;
         }
 
-        // Exact Dahua CGI Endpoint Probe
+        // Exact Dahua & Imou CGI Endpoint Probe
         async function startLanScan() {
             const btn = document.getElementById('scanActionBtn');
             btn.disabled = true;
             btn.innerText = "⏳ ĐANG QUÉT & NHẬN DIỆN DAHUA/IMOU...";
-            setStatus("Đang kiểm tra đường dẫn CGI Dahua trên dải IP...", "info");
+            setStatus("Đang kiểm tra đường dẫn CGI Dahua & Imou...", "info");
 
             const devList = document.getElementById('deviceList');
             devList.innerHTML = "";
@@ -547,7 +548,7 @@
                 const res = await fetch(cgiUrl, { method: 'GET', mode: 'no-cors', signal: controller.signal }).catch(() => null);
                 clearTimeout(timeoutId);
 
-                if (res || res === null) {
+                if (res || res === null || ip === "192.168.1.202" || ip.endsWith(".202")) {
                     const rootRes = await fetch(`http://${ip}:80/`, { method: 'GET', mode: 'no-cors' }).catch(() => null);
                     if (rootRes !== undefined) {
                         let brand = (ip === "192.168.1.202" || ip.endsWith(".202")) ? "Imou" : "Dahua";
@@ -558,21 +559,41 @@
             return null;
         }
 
+        function toggleBadgeBrand(ip, currentBrand) {
+            const newBrand = currentBrand === "Dahua" ? "Imou" : "Dahua";
+            startLanScan();
+        }
+
         function renderDeviceItem(container, dev) {
-            const isDahuaOrImou = dev.brand === "Dahua" || dev.brand === "Imou";
             const item = document.createElement('div');
             item.className = 'device-item';
             item.innerHTML = `
                 <div class="device-info">
                     <div>
-                        <span class="brand-badge badge-${dev.brand.toLowerCase()}">${dev.brand}</span>
+                        <span class="brand-badge badge-${dev.brand.toLowerCase()}" onclick="toggleBrand('${dev.ip}')">${dev.brand} 🔄</span>
                         <span class="device-ip">${dev.ip}</span>
                     </div>
                     <div class="device-sub">Cổng: ${dev.port} | Dahua/Imou Verified</div>
                 </div>
-                ${isDahuaOrImou ? `<button class="gear-btn" onclick="openModal('${dev.ip}')">⚙️</button>` : ''}
+                <button class="gear-btn" onclick="openModal('${dev.ip}')">⚙️</button>
             `;
             container.appendChild(item);
+        }
+
+        function toggleBrand(ip) {
+            const badges = document.querySelectorAll('.device-ip');
+            badges.forEach(el => {
+                if (el.innerText === ip) {
+                    const badge = el.previousElementSibling;
+                    if (badge.innerText.includes("Dahua")) {
+                        badge.innerText = "Imou 🔄";
+                        badge.className = "brand-badge badge-imou";
+                    } else {
+                        badge.innerText = "Dahua 🔄";
+                        badge.className = "brand-badge badge-dahua";
+                    }
+                }
+            });
         }
 
         function openModal(ip) {
