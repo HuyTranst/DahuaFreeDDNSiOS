@@ -238,10 +238,31 @@ struct ContentView: View {
     @State private var activeDevice: CameraDevice? = nil
     @State private var showActionSheet = false
     @State private var activeModalType: ModalType? = nil
-    @State private var showScannerLogs: Bool = false
     @State private var selectedDeviceDetail: CameraDevice? = nil
+    @State private var showScannerLogs: Bool = false
+    @State private var scanFilterMode: Int = 0 // 0: Dahua & Imou, 1: Tất Cả (Kèm NoName)
 
-    // Warranty Check State
+    private var displayedDevices: [CameraDevice] {
+        let sorted = scanner.discoveredDevices.sorted { dev1, dev2 in
+            if (dev1.brand == .noName) != (dev2.brand == .noName) {
+                return dev1.brand != .noName // Dahua/Imou first, NoName second
+            }
+            return dev1.ip < dev2.ip
+        }
+        if scanFilterMode == 0 {
+            return sorted.filter { $0.brand == .dahua || $0.brand == .imou }
+        } else {
+            return sorted
+        }
+    }
+
+    private var dahuaImouCount: Int {
+        scanner.discoveredDevices.filter { $0.brand == .dahua || $0.brand == .imou }.count
+    }
+
+    private var allDevicesCount: Int {
+        scanner.discoveredDevices.count
+    }
     @State private var rawScannedSn: String = ""
     @State private var cleanedSn: String = ""
     @State private var showCameraScanner: Bool = false
@@ -845,7 +866,7 @@ struct ContentView: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
                                     ForEach(scanner.discoveredDevices) { dev in
-                                        if !dev.sn.isEmpty {
+                                        if !dev.sn.isEmpty && dev.brand != .noName {
                                             Button(action: {
                                                 let cleaned = self.cleanSerialNumber(dev.sn)
                                                 self.rawScannedSn = dev.sn
@@ -1090,7 +1111,7 @@ struct ContentView: View {
                 // Discovered Devices List
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Thiết Bị Phát Hiện (\(scanner.discoveredDevices.count))")
+                        Text("Thiết Bị Phát Hiện (\(displayedDevices.count))")
                             .font(.headline)
                         Spacer()
                         if scanner.isScanning {
@@ -1100,14 +1121,23 @@ struct ContentView: View {
                     }
                     .padding(.horizontal)
 
-                    if scanner.discoveredDevices.isEmpty {
+                    // Bộ lọc: Dahua & Imou vs Tất Cả
+                    Picker("Bộ Lọc Thiết Bị", selection: $scanFilterMode) {
+                        Text("Dahua & Imou (\(dahuaImouCount))").tag(0)
+                        Text("Tất Cả (\(allDevicesCount))").tag(1)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+
+                    if displayedDevices.isEmpty {
                         VStack(spacing: 8) {
-                            Image(systemName: "video.slash")
+                            Image(systemName: scanFilterMode == 0 ? "video.slash" : "network.slash")
                                 .font(.largeTitle)
                                 .foregroundColor(.gray)
-                            Text(scanner.isScanning ? "Đang dò tìm camera trong mạng..." : "Chưa tìm thấy camera nào.")
+                            Text(scanner.isScanning ? "Đang dò tìm thiết bị trong mạng..." : (scanFilterMode == 0 && allDevicesCount > 0 ? "Không có camera Dahua/Imou nào.\n(Có \(allDevicesCount) thiết bị LAN khác trong tùy chọn 'Tất Cả')." : "Chưa tìm thấy thiết bị nào."))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
                             Button("Nhấn vào đây để bắt đầu quét ngay") {
                                 scanner.startScan(timeout: 6.0)
                             }
@@ -1120,7 +1150,7 @@ struct ContentView: View {
                         .cornerRadius(12)
                         .padding(.horizontal)
                     } else {
-                        ForEach(scanner.discoveredDevices) { dev in
+                        ForEach(displayedDevices) { dev in
                             DeviceRowView(device: dev) {
                                 self.activeDevice = dev
                                 self.showActionSheet = true
@@ -3448,7 +3478,21 @@ struct CameraLogoIcon: View {
     }()
 
     var body: some View {
-        if let uiImage = CameraLogoIcon.logoImage {
+        if brand == .noName {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray)
+                    .frame(width: 44, height: 44)
+                VStack(spacing: 2) {
+                    Image(systemName: "questionmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.white)
+                    Text("NoName")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+        } else if let uiImage = CameraLogoIcon.logoImage {
             Image(uiImage: uiImage)
                 .resizable()
                 .scaledToFit()
@@ -3585,87 +3629,151 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
 }
 
 
-// MARK: - Rich Device Row View (Quét IP Camera Dahua & Imou)
+// MARK: - Rich Device Row View (Quét IP Camera Dahua & Imou & NoName)
 struct DeviceRowView: View {
     let device: CameraDevice
     let onSettingsTapped: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(device.brand.rawValue)
-                    .font(.caption2.weight(.bold))
+        HStack(spacing: 12) {
+            // Icon Avatar Box theo Brand
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(device.brand == .noName ? Color.gray.opacity(0.15) : device.brand.color.opacity(0.12))
+                    .frame(width: 44, height: 44)
+
+                if device.brand == .noName {
+                    VStack(spacing: 2) {
+                        Image(systemName: "questionmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.gray)
+                        Text("NoName")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.gray)
+                    }
+                } else if device.brand == .imou {
+                    VStack(spacing: 2) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.orange)
+                        Text("Imou")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.orange)
+                    }
+                } else {
+                    VStack(spacing: 2) {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.red)
+                        Text("Dahua")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    HStack(spacing: 3) {
+                        if device.brand == .noName {
+                            Image(systemName: "questionmark.circle.fill")
+                                .font(.system(size: 10))
+                        }
+                        Text(device.brand.rawValue)
+                            .font(.caption2.weight(.bold))
+                    }
                     .foregroundColor(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(device.brand.color)
                     .cornerRadius(4)
 
-                Text(device.machineName.isEmpty ? "Camera" : device.machineName)
-                    .font(.headline)
-                    .lineLimit(1)
+                    Text(device.machineName.isEmpty ? (device.brand == .noName ? "Thiết bị mạng (NoName)" : "Camera") : device.machineName)
+                        .font(.headline)
+                        .lineLimit(1)
 
-                Spacer()
+                    Spacer()
 
-                Text(device.ip)
-                    .font(.system(.subheadline, design: .monospaced).weight(.bold))
-                    .foregroundColor(.primary)
-            }
-
-            HStack {
-                Label(device.serialNo.isEmpty ? "N/A" : device.serialNo, systemImage: "number")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Spacer()
-
-                if !device.mac.isEmpty {
-                    Label(device.mac, systemImage: "network")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Text(device.ip)
+                        .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                        .foregroundColor(.primary)
                 }
-            }
 
-            HStack(spacing: 8) {
-                Text("TCP: \(device.tcpPort)")
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.blue.opacity(0.12))
-                    .foregroundColor(.blue)
-                    .cornerRadius(4)
-
-                Text("HTTP: \(device.httpPort)")
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.green.opacity(0.12))
-                    .foregroundColor(.green)
-                    .cornerRadius(4)
-
-                Text(device.isInitialized ? "Đã kích hoạt" : "Chưa kích hoạt")
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(device.isInitialized ? Color.green.opacity(0.15) : Color.orange.opacity(0.2))
-                    .foregroundColor(device.isInitialized ? .green : .orange)
-                    .cornerRadius(4)
-
-                Spacer()
-
-                Button(action: onSettingsTapped) {
-                    HStack(spacing: 3) {
-                        Image(systemName: "gearshape.fill")
-                        Text("Cài đặt")
+                HStack {
+                    if device.brand == .noName {
+                        Label("Thiết bị mạng LAN", systemImage: "network")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Label(device.serialNo.isEmpty ? "N/A" : device.serialNo, systemImage: "number")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                    .font(.caption.weight(.bold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.orange)
-                    .cornerRadius(6)
+
+                    Spacer()
+
+                    if !device.mac.isEmpty {
+                        Label(device.mac, systemImage: "network")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
-                .buttonStyle(BorderlessButtonStyle())
+
+                HStack(spacing: 6) {
+                    if device.tcpPort > 0 {
+                        Text("TCP: \(device.tcpPort)")
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.12))
+                            .foregroundColor(.blue)
+                            .cornerRadius(4)
+                    }
+
+                    if device.httpPort > 0 {
+                        Text("HTTP: \(device.httpPort)")
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.12))
+                            .foregroundColor(.green)
+                            .cornerRadius(4)
+                    }
+
+                    if device.brand != .noName {
+                        Text(device.isInitialized ? "Đã kích hoạt" : "Chưa kích hoạt")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(device.isInitialized ? Color.green.opacity(0.15) : Color.orange.opacity(0.2))
+                            .foregroundColor(device.isInitialized ? .green : .orange)
+                            .cornerRadius(4)
+                    } else {
+                        Text("Active")
+                            .font(.caption2.weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.gray.opacity(0.15))
+                            .foregroundColor(.gray)
+                            .cornerRadius(4)
+                    }
+
+                    Spacer()
+
+                    Button(action: onSettingsTapped) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "gearshape.fill")
+                            Text("Cài đặt")
+                        }
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(device.brand == .noName ? Color.blue : Color.orange)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
             }
         }
         .padding(.vertical, 8)
@@ -3686,13 +3794,13 @@ struct DeviceDetailView: View {
         NavigationView {
             Form {
                 Section(header: Text("Thông tin chung")) {
-                    DetailRow(title: "Hãng sản xuất", value: "\(device.brand.rawValue) \(device.vendor.isEmpty ? "" : "(\(device.vendor))")")
+                    DetailRow(title: "Hãng sản xuất", value: device.brand == .noName ? "NoName (Thiết bị mạng khác)" : "\(device.brand.rawValue) \(device.vendor.isEmpty ? "" : "(\(device.vendor))")")
                     DetailRow(title: "Tên Model / Sản phẩm", value: device.machineName)
                     DetailRow(title: "Loại thiết bị", value: device.deviceClass)
-                    DetailRow(title: "Số Serial (S/N)", value: device.serialNo, isMonospaced: true)
-                    DetailRow(title: "Địa chỉ MAC", value: device.mac, isMonospaced: true)
+                    DetailRow(title: "Số Serial (S/N)", value: device.brand == .noName ? "Không có" : device.serialNo, isMonospaced: true)
+                    DetailRow(title: "Địa chỉ MAC", value: device.mac.isEmpty ? "N/A" : device.mac, isMonospaced: true)
                     DetailRow(title: "Firmware", value: device.firmwareVersion.isEmpty ? "N/A" : device.firmwareVersion)
-                    DetailRow(title: "Trạng thái kích hoạt", value: device.isInitialized ? "Đã kích hoạt (Mã: \(device.initVal))" : "Chưa kích hoạt (Mã: \(device.initVal))")
+                    DetailRow(title: "Trạng thái kích hoạt", value: device.brand == .noName ? "Đang hoạt động (Active)" : (device.isInitialized ? "Đã kích hoạt (Mã: \(device.initVal))" : "Chưa kích hoạt (Mã: \(device.initVal))"))
                 }
 
                 Section(header: Text("Cấu hình mạng & Cổng kết nối")) {

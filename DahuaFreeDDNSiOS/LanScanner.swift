@@ -9,19 +9,21 @@ import Darwin
 public enum CameraBrand: String, CaseIterable, Identifiable, Hashable {
     case dahua = "Dahua"
     case imou = "Imou"
+    case noName = "NoName"
     case unknown = "IP Camera"
 
     public var id: String { rawValue }
 
     public var isConfigurable: Bool {
-        return true
+        return self != .noName
     }
 
     public var color: Color {
         switch self {
         case .dahua: return .red
         case .imou: return .orange
-        case .unknown: return .gray
+        case .noName: return .gray
+        case .unknown: return .blue
         }
     }
 }
@@ -190,7 +192,13 @@ public class LanScanner: ObservableObject {
         DispatchQueue.main.async {
             self.isScanning = false
             self.progress = 1.0
-            self.statusMessage = "Đã dừng quét. Tìm thấy \(self.discoveredDevices.count) camera."
+            let camCount = self.discoveredDevices.filter { $0.brand == .dahua || $0.brand == .imou }.count
+            let otherCount = self.discoveredDevices.filter { $0.brand == .noName }.count
+            if otherCount > 0 {
+                self.statusMessage = "Đã dừng. Tìm thấy \(camCount) camera, \(otherCount) thiết bị NoName."
+            } else {
+                self.statusMessage = "Đã dừng quét. Tìm thấy \(camCount) camera."
+            }
         }
         addLog("Đã dừng quét.")
     }
@@ -299,15 +307,24 @@ public class LanScanner: ObservableObject {
         DispatchQueue.main.async {
             self.isScanning = false
             self.progress = 1.0
-            self.statusMessage = "Hoàn tất! Tìm thấy \(self.discoveredDevices.count) camera."
+            let camCount = self.discoveredDevices.filter { $0.brand == .dahua || $0.brand == .imou }.count
+            let otherCount = self.discoveredDevices.filter { $0.brand == .noName }.count
+            if otherCount > 0 {
+                self.statusMessage = "Hoàn tất! Tìm thấy \(camCount) camera, \(otherCount) thiết bị NoName."
+            } else {
+                self.statusMessage = "Hoàn tất! Tìm thấy \(camCount) camera Dahua/Imou."
+            }
         }
-        addLog("Quét hoàn tất: Tìm thấy \(self.discoveredDevices.count) camera.")
+        let totalCams = discoveredDevices.filter { $0.brand == .dahua || $0.brand == .imou }.count
+        let totalOthers = discoveredDevices.filter { $0.brand == .noName }.count
+        addLog("Quét hoàn tất: \(totalCams) camera Dahua/Imou, \(totalOthers) thiết bị NoName.")
     }
 
-    /// Quét cổng TCP 37777 (NetSDK Port) trên nền concurrent để kích hoạt camera nếu cần
+    /// Quét các cổng TCP phổ biến trên LAN để kích hoạt camera và nhận diện các thiết bị mạng khác (NoName)
     private func checkTcpPortsAndProbe(subnet: String, packet: Data) {
-        let semaphore = DispatchSemaphore(value: 20)
+        let semaphore = DispatchSemaphore(value: 25)
         let group = DispatchGroup()
+        let portsToProbe: [UInt16] = [37777, 80, 443, 8080, 554, 8000, 53]
 
         for host in 1...254 {
             let ip = "\(subnet).\(host)"
@@ -321,26 +338,78 @@ public class LanScanner: ObservableObject {
                 }
                 guard let self = self, self.isScanning else { return }
 
-                let s = socket(AF_INET, SOCK_STREAM, 0)
-                guard s >= 0 else { return }
+                var openPort: UInt16? = nil
 
-                var tv = timeval(tv_sec: 0, tv_usec: 120_000)
-                setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+                for p in portsToProbe {
+                    guard self.isScanning else { break }
 
-                var addr = sockaddr_in()
-                addr.sin_family = sa_family_t(AF_INET)
-                addr.sin_port = in_port_t(37777).bigEndian
-                inet_pton(AF_INET, ip, &addr.sin_addr)
+                    let s = socket(AF_INET, SOCK_STREAM, 0)
+                    guard s >= 0 else { continue }
 
-                let res = withUnsafePointer(to: &addr) {
-                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                        connect(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    var tv = timeval(tv_sec: 0, tv_usec: 80_000) // 80ms timeout per port
+                    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+                    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+
+                    var addr = sockaddr_in()
+                    addr.sin_family = sa_family_t(AF_INET)
+                    addr.sin_port = p.bigEndian
+                    inet_pton(AF_INET, ip, &addr.sin_addr)
+
+                    let res = withUnsafePointer(to: &addr) {
+                        $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                            connect(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                        }
+                    }
+                    close(s)
+
+                    if res == 0 {
+                        openPort = p
+                        break
                     }
                 }
-                close(s)
 
-                if res == 0 {
+                guard let detectedPort = openPort else { return }
+
+                // Nếu là cổng camera hoặc web, gửi unicast DHIP để kích hoạt phản hồi Dahua
+                if detectedPort == 37777 || detectedPort == 80 || detectedPort == 554 {
                     self.sendPacket(packet, toHost: ip, port: 37810)
+                }
+
+                // Chờ 1.2s xem có phản hồi DHIP chính thức không. Nếu không, nhận diện là NoName
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                    guard let self = self, self.isScanning || !self.discoveredDevices.isEmpty else { return }
+
+                    // Không ghi đè nếu đã nhận diện là Dahua hoặc Imou
+                    if let existing = self.discoveredDevices.firstIndex(where: { $0.ip == ip }) {
+                        if self.discoveredDevices[existing].brand == .dahua || self.discoveredDevices[existing].brand == .imou {
+                            return
+                        }
+                    } else {
+                        let isGateway = ip.hasSuffix(".1")
+                        let devName = isGateway ? "Router / Gateway (NoName)" : "Thiết bị mạng (NoName)"
+                        let devClass = isGateway ? "Gateway" : "Network Device"
+                        let noNameDev = CameraDevice(
+                            id: "\(ip)_NoName",
+                            brand: .noName,
+                            ip: ip,
+                            serialNo: "NoName-\(ip)",
+                            mac: "",
+                            machineName: devName,
+                            deviceClass: devClass,
+                            firmwareVersion: "N/A",
+                            tcpPort: Int(detectedPort),
+                            httpPort: (detectedPort == 80 || detectedPort == 8080) ? Int(detectedPort) : 80,
+                            isInitialized: true,
+                            initVal: 0,
+                            subnetMask: "255.255.255.0",
+                            gateway: "\(subnet).1",
+                            dhcpEnabled: true,
+                            vendor: "Generic",
+                            rawJson: ""
+                        )
+                        self.discoveredDevices.append(noNameDev)
+                        self.addLog(">>> Phát hiện thiết bị NoName tại \(ip) (Port: \(detectedPort))")
+                    }
                 }
             }
         }
