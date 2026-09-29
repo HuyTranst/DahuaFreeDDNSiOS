@@ -275,11 +275,13 @@ struct ContentView: View {
     @State var port: String = "80"
     @State var camUser: String = "admin"
     @State var camPass: String = ""
+    @State var camPassShowPassword: Bool = false
     @State var selectedPresetIndex: Int = 0
     @State var serverAddr: String = "fastddns.net"
     @State var domain: String = "mycam.fastddns.net"
     @State var ddnsUser: String = ""
     @State var ddnsPass: String = ""
+    @State var ddnsPassShowPassword: Bool = false
     @State var enableDdns: Bool = true
     @State var selectedChannelIdx: String = "0"
 
@@ -287,11 +289,18 @@ struct ContentView: View {
     @State private var newIp: String = "192.168.1.120"
     @State private var subnetMask: String = "255.255.255.0"
     @State private var gateway: String = "192.168.1.1"
+    @State private var changeIpShowPassword: Bool = false
 
     // Change Password State
     @State private var oldPass: String = ""
     @State private var newPass: String = ""
     @State private var confirmPass: String = ""
+    @State private var changePassOldShow: Bool = false
+    @State private var changePassNewShow: Bool = false
+    @State private var changePassConfirmShow: Bool = false
+
+    // Reboot State
+    @State private var rebootShowPassword: Bool = false
 
     // UI Status
     @State private var isLoading: Bool = false
@@ -1229,8 +1238,18 @@ struct ContentView: View {
                 HStack {
                     Text("Pass Camera")
                     Spacer()
-                    SecureField("Mật khẩu camera", text: $camPass)
-                        .multilineTextAlignment(.trailing)
+                    if camPassShowPassword {
+                        TextField("Mật khẩu camera", text: $camPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Mật khẩu camera", text: $camPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { camPassShowPassword.toggle() }) {
+                        Image(systemName: camPassShowPassword ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
             }
 
@@ -1280,8 +1299,18 @@ struct ContentView: View {
                 HStack {
                     Text("DDNS Pass")
                     Spacer()
-                    SecureField("Pass DDNS (nếu có)", text: $ddnsPass)
-                        .multilineTextAlignment(.trailing)
+                    if ddnsPassShowPassword {
+                        TextField("Pass DDNS (nếu có)", text: $ddnsPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Pass DDNS (nếu có)", text: $ddnsPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { ddnsPassShowPassword.toggle() }) {
+                        Image(systemName: ddnsPassShowPassword ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
 
                 Toggle("Kích hoạt DDNS", isOn: $enableDdns)
@@ -1439,8 +1468,18 @@ struct ContentView: View {
                 HStack {
                     Text("Pass Camera")
                     Spacer()
-                    SecureField("Mật khẩu", text: $camPass)
-                        .multilineTextAlignment(.trailing)
+                    if changeIpShowPassword {
+                        TextField("Mật khẩu", text: $camPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Mật khẩu", text: $camPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { changeIpShowPassword.toggle() }) {
+                        Image(systemName: changeIpShowPassword ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
             }
 
@@ -1466,9 +1505,56 @@ struct ContentView: View {
     var changePassView: some View {
         Form {
             Section(header: Text("Đổi Mật Khẩu Camera [\(ip)]")) {
-                SecureField("Mật khẩu hiện tại", text: $oldPass)
-                SecureField("Mật khẩu mới", text: $newPass)
-                SecureField("Xác nhận mật khẩu mới", text: $confirmPass)
+                HStack {
+                    Text("MK hiện tại")
+                    Spacer()
+                    if changePassOldShow {
+                        TextField("Mật khẩu hiện tại", text: $oldPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Mật khẩu hiện tại", text: $oldPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { changePassOldShow.toggle() }) {
+                        Image(systemName: changePassOldShow ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
+
+                HStack {
+                    Text("MK mới")
+                    Spacer()
+                    if changePassNewShow {
+                        TextField("Mật khẩu mới", text: $newPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Mật khẩu mới", text: $newPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { changePassNewShow.toggle() }) {
+                        Image(systemName: changePassNewShow ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
+
+                HStack {
+                    Text("Xác nhận MK")
+                    Spacer()
+                    if changePassConfirmShow {
+                        TextField("Xác nhận mật khẩu mới", text: $confirmPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Xác nhận mật khẩu mới", text: $confirmPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { changePassConfirmShow.toggle() }) {
+                        Image(systemName: changePassConfirmShow ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                }
             }
 
             Section {
@@ -1517,8 +1603,18 @@ struct ContentView: View {
                 HStack {
                     Text("Pass Camera")
                     Spacer()
-                    SecureField("Mật khẩu camera", text: $camPass)
-                        .multilineTextAlignment(.trailing)
+                    if rebootShowPassword {
+                        TextField("Mật khẩu camera", text: $camPass)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        SecureField("Mật khẩu camera", text: $camPass)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    Button(action: { rebootShowPassword.toggle() }) {
+                        Image(systemName: rebootShowPassword ? "eye.slash" : "eye")
+                            .foregroundColor(.gray)
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
                 }
             }
 
