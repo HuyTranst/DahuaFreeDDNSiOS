@@ -1,452 +1,550 @@
 import Foundation
+import SwiftUI
+import Network
 import Combine
 import Darwin
 
-enum CameraBrand: String, CaseIterable, Identifiable {
+// MARK: - Models
+
+public enum CameraBrand: String, CaseIterable, Identifiable, Hashable {
     case dahua = "Dahua"
     case imou = "Imou"
-    case hikvision = "Hikvision"
-    case unv = "UNV"
-    case seetong = "Seetong"
-    case tiandy = "Tiandy"
-    case onvif = "ONVIF"
     case unknown = "IP Camera"
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var isConfigurable: Bool {
-        return self == .dahua || self == .imou || self == .unknown
+    public var isConfigurable: Bool {
+        return true
+    }
+
+    public var color: Color {
+        switch self {
+        case .dahua: return .red
+        case .imou: return .orange
+        case .unknown: return .gray
+        }
     }
 }
 
-struct CameraDevice: Identifiable, Hashable {
-    let id = UUID()
-    let ip: String
-    let port: Int
-    var brand: CameraBrand
-    var model: String
-    var mac: String
-    var sn: String
-    var extraInfo: String
+public struct CameraDevice: Identifiable, Hashable {
+    public let id: String
+    public let brand: CameraBrand
+    public let ip: String
+    public let serialNo: String
+    public let mac: String
+    public let machineName: String
+    public let deviceClass: String
+    public let firmwareVersion: String
+    public let tcpPort: Int
+    public let httpPort: Int
+    public let isInitialized: Bool
+    public let initVal: Int
+    public let subnetMask: String
+    public let gateway: String
+    public let dhcpEnabled: Bool
+    public let vendor: String
+    public let rawJson: String
+
+    // Backward compatibility helpers for ContentView & existing features
+    public var sn: String { serialNo }
+    public var model: String { machineName }
+    public var port: Int { httpPort > 0 ? httpPort : 80 }
+    public var extraInfo: String { "TCP: \(tcpPort), HTTP: \(httpPort)" }
+
+    public init(
+        id: String,
+        brand: CameraBrand,
+        ip: String,
+        serialNo: String,
+        mac: String,
+        machineName: String,
+        deviceClass: String = "IPC",
+        firmwareVersion: String = "",
+        tcpPort: Int = 37777,
+        httpPort: Int = 80,
+        isInitialized: Bool = true,
+        initVal: Int = 1158,
+        subnetMask: String = "255.255.255.0",
+        gateway: String = "192.168.1.1",
+        dhcpEnabled: Bool = true,
+        vendor: String = "",
+        rawJson: String = ""
+    ) {
+        self.id = id
+        self.brand = brand
+        self.ip = ip
+        self.serialNo = serialNo
+        self.mac = mac
+        self.machineName = machineName
+        self.deviceClass = deviceClass
+        self.firmwareVersion = firmwareVersion
+        self.tcpPort = tcpPort
+        self.httpPort = httpPort
+        self.isInitialized = isInitialized
+        self.initVal = initVal
+        self.subnetMask = subnetMask
+        self.gateway = gateway
+        self.dhcpEnabled = dhcpEnabled
+        self.vendor = vendor
+        self.rawJson = rawJson
+    }
 }
 
-class LanScanner: ObservableObject {
-    @Published var isScanning = false
-    @Published var progress: Float = 0.0
-    @Published var statusMessage = "Sẵn sàng quét."
-    @Published var discoveredDevices: [CameraDevice] = []
+public typealias DahuaDevice = CameraDevice
 
-    private let scanQueue = DispatchQueue(label: "com.dahua.lanning", qos: .userInitiated, attributes: .concurrent)
+// MARK: - Dahua & Imou Scanner Engine (Dual-Engine: UDP DHIP + TCP 37777 Check)
 
-    func startScan() {
-        guard !isScanning else { return }
+public class LanScanner: ObservableObject {
+    @Published public var discoveredDevices: [CameraDevice] = []
+    @Published public var isScanning: Bool = false
+    @Published public var progress: Float = 0.0
+    @Published public var statusMessage: String = "Sẵn sàng quét mạng LAN"
+    @Published public var localIpAddress: String = "Đang kiểm tra..."
+    @Published public var targetSubnetPrefix: String = "192.168.1"
+    @Published public var scanLogs: [String] = []
+
+    private var socketFd: Int32 = -1
+    private let queue = DispatchQueue(label: "com.dahua.scanner", qos: .userInitiated)
+    private var browser: NWBrowser?
+
+    public init() {
+        refreshLocalIp()
+        triggerLocalNetworkPrivacyPrompt()
+    }
+
+    /// Kích hoạt popup xin quyền Local Network của Apple bằng Network.framework
+    public func triggerLocalNetworkPrivacyPrompt() {
+        let params = NWParameters()
+        params.includePeerToPeer = true
+        let browser = NWBrowser(for: .bonjour(type: "_dahua._udp", domain: nil), using: params)
+        browser.stateUpdateHandler = { _ in }
+        browser.start(queue: queue)
+        self.browser = browser
+    }
+
+    /// Cập nhật IP hiện tại của iPhone (ưu tiên tuyệt đối Wi-Fi en0)
+    public func refreshLocalIp() {
+        let ips = getLocalIPv4Addresses()
+        let preferredIp = ips.first(where: { $0.hasPrefix("192.168.") }) ??
+                          ips.first(where: { !$0.hasPrefix("10.") && !$0.hasPrefix("127.") }) ??
+                          ips.first ?? "192.168.1.94"
 
         DispatchQueue.main.async {
+            self.localIpAddress = preferredIp
+            let parts = preferredIp.split(separator: ".")
+            if parts.count == 4 && !preferredIp.hasPrefix("10.") {
+                self.targetSubnetPrefix = "\(parts[0]).\(parts[1]).\(parts[2])"
+            } else if self.targetSubnetPrefix.hasPrefix("10.") || self.targetSubnetPrefix.isEmpty {
+                self.targetSubnetPrefix = "192.168.1"
+            }
+        }
+    }
+
+    public func addLog(_ msg: String) {
+        let timeStr = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        DispatchQueue.main.async {
+            self.scanLogs.append("[\(timeStr)] \(msg)")
+            if self.scanLogs.count > 100 {
+                self.scanLogs.removeFirst()
+            }
+        }
+    }
+
+    public func startScan() {
+        startScan(timeout: 6.0)
+    }
+
+    /// Bắt đầu quét toàn diện
+    public func startScan(timeout: TimeInterval = 6.0) {
+        guard !isScanning else { return }
+
+        var subnetToScan = targetSubnetPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
+        if subnetToScan.isEmpty || subnetToScan.hasPrefix("10.") {
+            subnetToScan = "192.168.1"
+            DispatchQueue.main.async {
+                self.targetSubnetPrefix = "192.168.1"
+            }
+        }
+
+        DispatchQueue.main.async {
+            self.discoveredDevices.removeAll()
+            self.scanLogs.removeAll()
             self.isScanning = true
             self.progress = 0.05
-            self.statusMessage = "Đang phát hiện đa giao thức (DHDiscover UDP 37810 & HTTP Probing)..."
-            self.discoveredDevices.removeAll()
+            self.statusMessage = "Đang quét dải \(subnetToScan).1 - 254..."
         }
 
-        scanQueue.async {
-            let localIp = self.getLocalIPAddress()
-            let subnetPrefix = self.getSubnetPrefix(from: localIp)
+        addLog("Bắt đầu quét mạng Wi-Fi. Subnet: \(subnetToScan).0/24")
 
-            let group = DispatchGroup()
-            let lock = NSLock()
-            let totalHosts = 254
-            var completedCount = 0
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.performDiscovery(subnet: subnetToScan, timeout: timeout)
+        }
+    }
 
-            // 1. Run UDP DHDiscover broadcast with recvfrom loop for instant Model, MAC & SN
-            self.sendUDPDiscovery { dhDevice in
-                lock.lock()
-                self.addOrUpdateDeviceLocked(newDev: dhDevice)
-                lock.unlock()
-            }
+    public func stopScan() {
+        if socketFd >= 0 {
+            close(socketFd)
+            socketFd = -1
+        }
+        DispatchQueue.main.async {
+            self.isScanning = false
+            self.progress = 1.0
+            self.statusMessage = "Đã dừng quét. Tìm thấy \(self.discoveredDevices.count) camera."
+        }
+        addLog("Đã dừng quét.")
+    }
 
-            // 2. Subnet HTTP & CGI Probe
-            let sessionConfig = URLSessionConfiguration.default
-            sessionConfig.timeoutIntervalForRequest = 1.2
-            sessionConfig.timeoutIntervalForResource = 1.2
-            let session = URLSession(configuration: sessionConfig)
-
-            let semaphore = DispatchSemaphore(value: 32)
-
-            for host in 1...totalHosts {
-                let targetIp = "\(subnetPrefix).\(host)"
-                semaphore.wait()
-
-                group.enter()
-                self.probeSingleIp(ip: targetIp, session: session) { device in
-                    defer {
-                        semaphore.signal()
-                        group.leave()
-                    }
-
-                    if let dev = device {
-                        lock.lock()
-                        self.addOrUpdateDeviceLocked(newDev: dev)
-                        lock.unlock()
-                    }
-
-                    lock.lock()
-                    completedCount += 1
-                    let curProgress = 0.05 + (Float(completedCount) / Float(totalHosts)) * 0.95
-                    DispatchQueue.main.async {
-                        self.progress = curProgress
-                    }
-                    lock.unlock()
-                }
-            }
-
-            group.wait()
-
+    // MARK: - Core Discovery Logic
+    private func performDiscovery(subnet: String, timeout: TimeInterval) {
+        socketFd = socket(AF_INET, SOCK_DGRAM, 0)
+        guard socketFd >= 0 else {
             DispatchQueue.main.async {
                 self.isScanning = false
-                self.progress = 1.0
-                self.statusMessage = "Quét hoàn tất! Tìm thấy \(self.discoveredDevices.count) thiết bị."
+                self.statusMessage = "Lỗi: Không tạo được UDP socket"
             }
-        }
-    }
-
-    private func addOrUpdateDeviceLocked(newDev: CameraDevice) {
-        if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == newDev.ip }) {
-            var existing = self.discoveredDevices[idx]
-            
-            // Smart Merge properties
-            if !newDev.model.isEmpty { existing.model = newDev.model }
-            if !newDev.mac.isEmpty { existing.mac = newDev.mac }
-            if !newDev.sn.isEmpty { existing.sn = newDev.sn }
-
-            // Upgrade brand if new info indicates Imou or specific brand
-            if newDev.brand == .imou {
-                existing.brand = .imou
-            } else if existing.brand == .unknown && newDev.brand != .unknown {
-                existing.brand = newDev.brand
-            }
-
-            DispatchQueue.main.async {
-                self.discoveredDevices[idx] = existing
-            }
-        } else {
-            DispatchQueue.main.async {
-                self.discoveredDevices.append(newDev)
-            }
-        }
-    }
-
-    private func probeSingleIp(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        // Primary CGI probe targeting magicBox.cgi getSystemInfo (returns deviceType & SerialNo)
-        guard let url = URL(string: "http://\(ip):80/cgi-bin/magicBox.cgi?action=getSystemInfo") else {
-            completion(nil)
+            addLog("Lỗi: Không tạo được UDP socket")
             return
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 1.2
+        var broadcastEnable: Int32 = 1
+        setsockopt(socketFd, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, socklen_t(MemoryLayout<Int32>.size))
 
-        let task = session.dataTask(with: request) { data, response, error in
-            guard let httpRes = response as? HTTPURLResponse else {
-                self.probeFallbackRoot(ip: ip, session: session, completion: completion)
-                return
+        var reuse: Int32 = 1
+        setsockopt(socketFd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        #if os(iOS)
+        setsockopt(socketFd, SOL_SOCKET, SO_REUSEPORT, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        #endif
+
+        var tv = timeval(tv_sec: 0, tv_usec: 100_000)
+        setsockopt(socketFd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+
+        var bindAddr = sockaddr_in()
+        bindAddr.sin_family = sa_family_t(AF_INET)
+        bindAddr.sin_addr.s_addr = in_addr_t(0)
+        bindAddr.sin_port = in_port_t(0)
+
+        let bindResult = withUnsafePointer(to: &bindAddr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(socketFd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
-
-            let statusCode = httpRes.statusCode
-            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
-            let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
-            let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
-            let combined = "\(serverHeader) \(authHeader) \(bodyText)"
-
-            if statusCode == 200 || statusCode == 401 || bodyText.contains("appAuto") || bodyText.contains("SerialNo") || bodyText.contains("deviceType") {
-                let model = self.extractValue(from: bodyText, keys: ["deviceType", "DeviceType", "model", "Model"])
-                let sn = self.extractValue(from: bodyText, keys: ["SerialNo", "serialNo", "SN", "sn"])
-                let mac = self.extractValue(from: bodyText, keys: ["MACAddress", "mac", "MAC"])
-
-                let brand = self.parseBrand(text: combined, model: model, ip: ip, realm: authHeader)
-
-                let device = CameraDevice(
-                    ip: ip,
-                    port: 80,
-                    brand: brand,
-                    model: model,
-                    mac: mac,
-                    sn: sn,
-                    extraInfo: "Dahua/Imou CGI Verified"
-                )
-                completion(device)
-                return
-            }
-
-            self.probeFallbackConfigManager(ip: ip, session: session, completion: completion)
         }
-        task.resume()
-    }
 
-    private func probeFallbackConfigManager(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        guard let url = URL(string: "http://\(ip):80/cgi-bin/configManager.cgi?action=getConfig&name=MagicBox") else {
-            completion(nil)
+        if bindResult < 0 {
+            close(socketFd)
+            socketFd = -1
+            addLog("Lỗi: Không bind được socket")
             return
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 1.0
+        // Tạo gói tin DHIP Search Request chuẩn xác
+        let packet = buildDhipSearchPacket()
 
-        let task = session.dataTask(with: request) { data, response, error in
-            guard let httpRes = response as? HTTPURLResponse else {
-                self.probeFallbackRoot(ip: ip, session: session, completion: completion)
-                return
-            }
+        // Hàm gửi sweep có độ trễ 2.5ms để không làm tràn hàng đợi Wi-Fi
+        func sendPacedSweep(round: Int) {
+            self.addLog("Đợt \(round): Gửi Broadcast & Unicast \(subnet).1 -> .254...")
+            self.sendPacket(packet, toHost: "255.255.255.255", port: 37810)
+            self.sendPacket(packet, toHost: "239.255.255.251", port: 37810)
+            self.sendPacket(packet, toHost: "\(subnet).255", port: 37810)
 
-            let statusCode = httpRes.statusCode
-            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
-            let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
-            let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
-            let combined = "\(serverHeader) \(authHeader) \(bodyText)"
-
-            if statusCode == 401 || statusCode == 200 || bodyText.contains("table.magicbox") {
-                let model = self.extractValue(from: bodyText, keys: ["DeviceType", "deviceType", "model", "Model"])
-                let sn = self.extractValue(from: bodyText, keys: ["SerialNo", "serialNo", "SN", "sn"])
-                let mac = self.extractValue(from: bodyText, keys: ["MACAddress", "mac", "MAC"])
-
-                let brand = self.parseBrand(text: combined, model: model, ip: ip, realm: authHeader)
-
-                let device = CameraDevice(
-                    ip: ip,
-                    port: 80,
-                    brand: brand,
-                    model: model,
-                    mac: mac,
-                    sn: sn,
-                    extraInfo: "Dahua/Imou CGI Verified"
-                )
-                completion(device)
-                return
-            }
-
-            self.probeFallbackRoot(ip: ip, session: session, completion: completion)
-        }
-        task.resume()
-    }
-
-    private func probeFallbackRoot(ip: String, session: URLSession, completion: @escaping (CameraDevice?) -> Void) {
-        guard let url = URL(string: "http://\(ip):80/") else {
-            completion(nil)
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 1.0
-
-        let task = session.dataTask(with: request) { data, response, error in
-            guard let httpRes = response as? HTTPURLResponse else {
-                completion(nil)
-                return
-            }
-
-            let serverHeader = self.getHeaderValue(httpRes, name: "Server") ?? ""
-            let authHeader = self.getHeaderValue(httpRes, name: "WWW-Authenticate") ?? ""
-            let bodyText = String(data: data ?? Data(), encoding: .utf8) ?? ""
-            let combined = "\(serverHeader) \(authHeader) \(bodyText)"
-
-            var brand: CameraBrand = .unknown
-            let lower = combined.lowercased()
-
-            if lower.contains("hikvision") || lower.contains("app-web/") {
-                brand = .hikvision
-            } else if lower.contains("uniview") || lower.contains("unv") {
-                brand = .unv
-            } else if lower.contains("seetong") {
-                brand = .seetong
-            } else if lower.contains("tiandy") {
-                brand = .tiandy
-            } else if httpRes.statusCode == 401 || httpRes.statusCode == 200 {
-                brand = self.parseBrand(text: combined, model: "", ip: ip, realm: authHeader)
-            }
-
-            let device = CameraDevice(
-                ip: ip,
-                port: 80,
-                brand: brand,
-                model: "",
-                mac: "",
-                sn: "",
-                extraInfo: "Port 80 HTTP Probe"
-            )
-            completion(device)
-        }
-        task.resume()
-    }
-
-    private func sendUDPDiscovery(onFound: @escaping (CameraDevice) -> Void) {
-        let payload = "{\"method\":\"DHDiscover.search\",\"params\":{\"mac\":\"\"}}"
-        guard let data = payload.data(using: .utf8) else { return }
-
-        let sock = socket(AF_INET, SOCK_DGRAM, 0)
-        if sock < 0 { return }
-        defer { close(sock) }
-
-        var broadcastEnable = Int32(1)
-        setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &broadcastEnable, socklen_t(MemoryLayout<Int32>.size))
-
-        var timeout = timeval(tv_sec: 1, tv_usec: 500000)
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = UInt16(37810).bigEndian
-        inet_pton(AF_INET, "255.255.255.255", &addr.sin_addr)
-
-        _ = data.withUnsafeBytes { ptr in
-            if let baseAddr = ptr.baseAddress {
-                withUnsafePointer(to: &addr) { saPtrIn in
-                    saPtrIn.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
-                        sendto(sock, baseAddr, data.count, 0, saPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
-                    }
-                }
+            for host in 1...254 {
+                let targetIp = "\(subnet).\(host)"
+                self.sendPacket(packet, toHost: targetIp, port: 37810)
+                usleep(2500) // 2.5ms delay tránh drop packet trên chip Wi-Fi iPhone
             }
         }
 
-        // Receive response packets loop
-        var buffer = [UInt8](repeating: 0, count: 4096)
+        // 1. Gửi Đợt 1 ngay lập tức
+        sendPacedSweep(round: 1)
+
+        // 2. Chạy kiểm tra cổng TCP 37777 trên background concurrent queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            self.checkTcpPortsAndProbe(subnet: subnet, packet: packet)
+        }
+
+        // 3. Lắng nghe phản hồi từ camera & chạy Đợt 2 sau 1.8 giây
         let startTime = Date()
+        var buffer = [UInt8](repeating: 0, count: 65535)
+        var secondSweepSent = false
 
-        while Date().timeIntervalSince(startTime) < 1.8 {
+        while Date().timeIntervalSince(startTime) < timeout && socketFd >= 0 {
             var senderAddr = sockaddr_in()
             var senderLen = socklen_t(MemoryLayout<sockaddr_in>.size)
 
-            let bytesRead = withUnsafeMutablePointer(to: &senderAddr) { saPtrIn in
-                saPtrIn.withMemoryRebound(to: sockaddr.self, capacity: 1) { saPtr in
-                    recvfrom(sock, &buffer, buffer.count, 0, saPtr, &senderLen)
+            let bytesRead = withUnsafeMutablePointer(to: &senderAddr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    recvfrom(socketFd, &buffer, buffer.count, 0, $0, &senderLen)
                 }
             }
 
-            if bytesRead > 0 {
-                let responseData = Data(buffer[0..<bytesRead])
-                if let responseText = String(data: responseData, encoding: .utf8) {
-                    var ipStr = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                    var sinAddr = senderAddr.sin_addr
-                    inet_ntop(AF_INET, &sinAddr, &ipStr, socklen_t(INET_ADDRSTRLEN))
-                    let senderIp = String(cString: ipStr)
+            if bytesRead > 32 {
+                let packetData = Data(buffer[0..<bytesRead])
+                let senderIp = String(cString: inet_ntoa(senderAddr.sin_addr))
+                parseIncomingPacket(packetData, senderIp: senderIp)
+            }
 
-                    if let device = parseDHDiscoverResponse(ip: senderIp, text: responseText) {
-                        onFound(device)
+            // Kích hoạt Đợt 2 sau 1.8s để bắt sạch camera bị trễ gói
+            if !secondSweepSent && Date().timeIntervalSince(startTime) >= 1.8 {
+                secondSweepSent = true
+                sendPacedSweep(round: 2)
+            }
+        }
+
+        if socketFd >= 0 {
+            close(socketFd)
+            socketFd = -1
+        }
+
+        DispatchQueue.main.async {
+            self.isScanning = false
+            self.progress = 1.0
+            self.statusMessage = "Hoàn tất! Tìm thấy \(self.discoveredDevices.count) camera."
+        }
+        addLog("Quét hoàn tất: Tìm thấy \(self.discoveredDevices.count) camera.")
+    }
+
+    /// Quét cổng TCP 37777 (NetSDK Port) trên nền concurrent để kích hoạt camera nếu cần
+    private func checkTcpPortsAndProbe(subnet: String, packet: Data) {
+        let semaphore = DispatchSemaphore(value: 20)
+        let group = DispatchGroup()
+
+        for host in 1...254 {
+            let ip = "\(subnet).\(host)"
+            semaphore.wait()
+            group.enter()
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                defer {
+                    semaphore.signal()
+                    group.leave()
+                }
+                guard let self = self, self.isScanning else { return }
+
+                let s = socket(AF_INET, SOCK_STREAM, 0)
+                guard s >= 0 else { return }
+
+                var tv = timeval(tv_sec: 0, tv_usec: 120_000)
+                setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+
+                var addr = sockaddr_in()
+                addr.sin_family = sa_family_t(AF_INET)
+                addr.sin_port = in_port_t(37777).bigEndian
+                inet_pton(AF_INET, ip, &addr.sin_addr)
+
+                let res = withUnsafePointer(to: &addr) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        connect(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
                     }
                 }
-            } else {
-                break
+                close(s)
+
+                if res == 0 {
+                    self.sendPacket(packet, toHost: ip, port: 37810)
+                }
+            }
+        }
+        group.wait()
+    }
+
+    /// Đóng gói gói tin DHIP Search Request chuẩn xác
+    private func buildDhipSearchPacket() -> Data {
+        let jsonDict: [String: Any] = [
+            "method": "DHDiscover.search",
+            "params": [
+                "mac": "",
+                "uni": 0
+            ]
+        ]
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: []) else {
+            return Data()
+        }
+
+        let jsonLen = UInt32(jsonData.count)
+
+        var header = [UInt8](repeating: 0, count: 32)
+        header[0] = 0x20 // 32 bytes header size
+        header[4] = 0x44 // 'D'
+        header[5] = 0x48 // 'H'
+        header[6] = 0x49 // 'I'
+        header[7] = 0x50 // 'P'
+        
+        header[16] = UInt8(jsonLen & 0xFF)
+        header[17] = UInt8((jsonLen >> 8) & 0xFF)
+        header[18] = UInt8((jsonLen >> 16) & 0xFF)
+        header[19] = UInt8((jsonLen >> 24) & 0xFF)
+
+        header[24] = header[16]
+        header[25] = header[17]
+        header[26] = header[18]
+        header[27] = header[19]
+
+        var data = Data(header)
+        data.append(jsonData)
+        return data
+    }
+
+    private func sendPacket(_ data: Data, toHost host: String, port: UInt16) {
+        guard socketFd >= 0 else { return }
+
+        var destAddr = sockaddr_in()
+        destAddr.sin_family = sa_family_t(AF_INET)
+        destAddr.sin_port = port.bigEndian
+        inet_pton(AF_INET, host, &destAddr.sin_addr)
+
+        _ = data.withUnsafeBytes { rawBuffer in
+            withUnsafePointer(to: &destAddr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    sendto(socketFd, rawBuffer.baseAddress, data.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
             }
         }
     }
 
-    private func parseDHDiscoverResponse(ip: String, text: String) -> CameraDevice? {
-        let lower = text.lowercased()
-        if !lower.contains("dhdiscover") && !lower.contains("dahua") && !lower.contains("imou") && !lower.contains("mac") && !lower.contains("sn") {
-            return nil
+    /// Giải mã gói tin phản hồi từ camera
+    private func parseIncomingPacket(_ data: Data, senderIp: String) {
+        guard data.count > 32 else { return }
+
+        let magic = data.subdata(in: 4..<8)
+        guard magic == Data([0x44, 0x48, 0x49, 0x50]) else { return }
+
+        guard let firstBrace = data.firstIndex(of: 0x7B),
+              let lastBrace = data.lastIndex(of: 0x7D),
+              lastBrace >= firstBrace else {
+            return
         }
 
-        let mac = extractValue(from: text, keys: ["mac", "MACAddress", "MAC"])
-        let model = extractValue(from: text, keys: ["deviceType", "DeviceType", "model", "Model"])
-        let sn = extractValue(from: text, keys: ["sn", "serialNo", "SerialNo", "SN"])
+        let jsonSlice = data.subdata(in: firstBrace..<(lastBrace + 1))
+        guard let jsonString = String(data: jsonSlice, encoding: .utf8) ??
+                               String(data: jsonSlice, encoding: .ascii),
+              let jsonObject = try? JSONSerialization.jsonObject(with: jsonSlice, options: []) as? [String: Any] else {
+            return
+        }
 
-        let brand = parseBrand(text: text, model: model, ip: ip, realm: "")
+        let params = jsonObject["params"] as? [String: Any]
+        guard let dev = params?["deviceInfo"] as? [String: Any] else {
+            return
+        }
 
-        return CameraDevice(
-            ip: ip,
-            port: 80,
+        let serialNo = (dev["SerialNo"] as? String) ?? "SN-\(senderIp)"
+        let mac = (dev["mac"] as? String) ?? (jsonObject["mac"] as? String) ?? ""
+        let machineName = (dev["MachineName"] as? String) ?? (dev["DeviceType"] as? String) ?? "Camera"
+        let vendor = (dev["Vendor"] as? String) ?? ""
+        let deviceClass = (dev["DeviceClass"] as? String) ?? "IPC"
+        let version = (dev["Version"] as? String) ?? ""
+        let tcpPort = (dev["Port"] as? Int) ?? 37777
+        let httpPort = (dev["HttpPort"] as? Int) ?? 80
+
+        // Phân tích trạng thái kích hoạt chuẩn xác (Dahua / Imou Init Bitmask):
+        // 0 hoặc 1: Chưa kích hoạt
+        // > 1 hoặc có bit 1 (initVal & 2 != 0): Đã kích hoạt (406, 1158, 2182, 2714, 3206,...)
+        let initVal = (dev["Init"] as? Int) ?? 0
+        let isInit = (initVal > 1) || (initVal & 2 != 0)
+
+        let ipv4Obj = dev["IPv4Address"] as? [String: Any]
+        let ip = (ipv4Obj?["IPAddress"] as? String) ?? senderIp
+        let subnet = (ipv4Obj?["SubnetMask"] as? String) ?? "255.255.255.0"
+        let gateway = (ipv4Obj?["DefaultGateway"] as? String) ?? "0.0.0.0"
+        let dhcp = (ipv4Obj?["DhcpEnable"] as? Bool) ?? true
+
+        let brand: CameraBrand
+        let lowerVendor = vendor.lowercased()
+        let lowerMachine = machineName.lowercased()
+
+        if lowerVendor.contains("lechange") || lowerVendor.contains("imou") || lowerVendor == "lc" ||
+            lowerMachine.hasPrefix("ipc-a") || lowerMachine.hasPrefix("ipc-c") ||
+            lowerMachine.hasPrefix("ipc-f") || lowerMachine.hasPrefix("ipc-s") ||
+            lowerMachine.contains("ranger") || lowerMachine.contains("cruiser") ||
+            lowerMachine.contains("cue") || lowerMachine.contains("bullet") {
+            brand = .imou
+        } else {
+            brand = .dahua
+        }
+
+        // Định danh duy nhất theo IP để không bao giờ bị ghi đè khi camera có nhiều IP hoặc trùng SN
+        let deviceId = "\(ip)_\(serialNo)"
+
+        let device = CameraDevice(
+            id: deviceId,
             brand: brand,
-            model: model,
+            ip: ip,
+            serialNo: serialNo,
             mac: mac,
-            sn: sn,
-            extraInfo: "DHDiscover UDP 37810"
+            machineName: machineName,
+            deviceClass: deviceClass,
+            firmwareVersion: version,
+            tcpPort: tcpPort,
+            httpPort: httpPort,
+            isInitialized: isInit,
+            initVal: initVal,
+            subnetMask: subnet,
+            gateway: gateway,
+            dhcpEnabled: dhcp,
+            vendor: vendor,
+            rawJson: jsonString
         )
-    }
 
-    private func parseBrand(text: String, model: String, ip: String, realm: String) -> CameraBrand {
-        let lower = "\(text) \(model) \(realm)".lowercased()
-        let lowerModel = model.lowercased()
+        addLog(">>> Nhận diện: [\(brand.rawValue)] \(machineName) tại \(ip) (SN: \(serialNo))")
 
-        let isImou = lower.contains("imou") || lower.contains("lechange") ||
-                     lowerModel.contains("ranger") || lowerModel.contains("cruiser") ||
-                     lowerModel.contains("rex") || lowerModel.contains("cue") ||
-                     lowerModel.contains("verso") || lowerModel.contains("knight") ||
-                     lowerModel.contains("cell") || lowerModel.contains("bulb") ||
-                     lowerModel.contains("ta22") || lowerModel.contains("c22") ||
-                     lowerModel.hasPrefix("ipc-a") || lowerModel.hasPrefix("ipc-c") ||
-                     lowerModel.hasPrefix("ipc-f") || lowerModel.hasPrefix("ipc-g") ||
-                     lowerModel.hasPrefix("ipc-k") || lowerModel.hasPrefix("ipc-s") ||
-                     lowerModel.hasPrefix("ipc-t") || lowerModel.hasPrefix("ipc-b") ||
-                     (!lowerModel.hasPrefix("dh-") && lowerModel.hasPrefix("ipc-")) ||
-                     ip.hasSuffix(".202") || ip == "192.168.1.202"
-
-        return isImou ? .imou : .dahua
-    }
-
-    private func extractValue(from text: String, keys: [String]) -> String {
-        for key in keys {
-            // Regex match JSON format: "key":"value"
-            if let regex = try? NSRegularExpression(pattern: "\"\(key)\"\\s*:\\s*\"([^\"]+)\"", options: .caseInsensitive) {
-                let nsText = text as NSString
-                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: nsText.length)) {
-                    let val = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !val.isEmpty { return val }
-                }
-            }
-            // Regex match CGI format: key=value
-            if let regex = try? NSRegularExpression(pattern: "\(key)\\s*=\\s*([^\\r\\n]+)", options: .caseInsensitive) {
-                let nsText = text as NSString
-                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: nsText.length)) {
-                    let val = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !val.isEmpty { return val }
-                }
+        DispatchQueue.main.async {
+            if let idx = self.discoveredDevices.firstIndex(where: { $0.ip == device.ip }) {
+                self.discoveredDevices[idx] = device
+            } else {
+                self.discoveredDevices.append(device)
             }
         }
-        return ""
     }
 
-    private func getHeaderValue(_ response: HTTPURLResponse, name: String) -> String? {
-        for (key, value) in response.allHeaderFields {
-            if let keyStr = key as? String, keyStr.caseInsensitiveCompare(name) == .orderedSame {
-                return "\(value)"
-            }
-        }
-        return nil
-    }
-
-    private func getLocalIPAddress() -> String {
-        var address: String = "192.168.1.1"
+    private func getLocalIPv4Addresses() -> [String] {
+        var wifiAddresses: [String] = []
+        var otherLanAddresses: [String] = []
+        var cellularAddresses: [String] = []
         var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        if getifaddrs(&ifaddr) == 0 {
-            var ptr = ifaddr
-            while ptr != nil {
-                defer { ptr = ptr?.pointee.ifa_next }
-                guard let interface = ptr?.pointee,
-                      let ifaAddr = interface.ifa_addr else { continue }
-                let addrFamily = ifaAddr.pointee.sa_family
-                if addrFamily == UInt8(AF_INET) {
-                    let name = String(cString: interface.ifa_name)
-                    if name == "en0" || name == "en1" || name.hasPrefix("eth") || name.hasPrefix("wlan") {
-                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                        getnameinfo(ifaAddr, socklen_t(ifaAddr.pointee.sa_len),
-                                    &hostname, socklen_t(hostname.count),
-                                    nil, socklen_t(0), NI_NUMERICHOST)
-                        address = String(cString: hostname)
-                        break
+
+        guard getifaddrs(&ifaddr) == 0, let firstAddr = ifaddr else {
+            return ["192.168.1.94"]
+        }
+        defer { freeifaddrs(ifaddr) }
+
+        var ptr: UnsafeMutablePointer<ifaddrs>? = firstAddr
+        while let current = ptr {
+            defer { ptr = current.pointee.ifa_next }
+            
+            guard let addrPtr = current.pointee.ifa_addr else { continue }
+            let family = addrPtr.pointee.sa_family
+            let flags = Int32(current.pointee.ifa_flags)
+            let flagLoopback: Int32 = 0x8
+            let flagUp: Int32 = 0x1
+
+            if family == UInt8(AF_INET) && (flags & flagLoopback) == 0 && (flags & flagUp) != 0 {
+                let ifName = String(cString: current.pointee.ifa_name)
+                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                if getnameinfo(addrPtr, socklen_t(MemoryLayout<sockaddr_in>.size), &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST) == 0 {
+                    let ipStr = String(cString: hostname)
+                    if !ipStr.isEmpty && ipStr != "127.0.0.1" {
+                        if ifName == "en0" || ifName.hasPrefix("en") {
+                            wifiAddresses.append(ipStr)
+                        } else if ifName.hasPrefix("pdp_ip") {
+                            cellularAddresses.append(ipStr)
+                        } else {
+                            otherLanAddresses.append(ipStr)
+                        }
                     }
                 }
             }
-            freeifaddrs(ifaddr)
         }
-        return address
-    }
 
-    private func getSubnetPrefix(from ip: String) -> String {
-        let components = ip.components(separatedBy: ".")
-        if components.count == 4 {
-            return "\(components[0]).\(components[1]).\(components[2])"
+        // Ưu tiên số 1: Wi-Fi en0
+        if let wifi = wifiAddresses.first {
+            return [wifi]
         }
-        return "192.168.1"
+        // Ưu tiên số 2: Các dải 192.168.x
+        if let lan = otherLanAddresses.first(where: { $0.hasPrefix("192.168.") }) {
+            return [lan]
+        }
+        return wifiAddresses.isEmpty ? (otherLanAddresses.isEmpty ? ["192.168.1.94"] : otherLanAddresses) : wifiAddresses
     }
 }
+
+public typealias DahuaScanner = LanScanner

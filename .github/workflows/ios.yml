@@ -29,6 +29,7 @@ jobs:
                  -framework UIKit \
                  -framework AVFoundation \
                  -framework CoreImage \
+                 -framework Network \
                  DahuaFreeDDNSiOS/*.swift \
                  -o DahuaFreeDDNS 2>&1 | tee compile.log
 

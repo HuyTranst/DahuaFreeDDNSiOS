@@ -238,6 +238,8 @@ struct ContentView: View {
     @State private var activeDevice: CameraDevice? = nil
     @State private var showActionSheet = false
     @State private var activeModalType: ModalType? = nil
+    @State private var showScannerLogs: Bool = false
+    @State private var selectedDeviceDetail: CameraDevice? = nil
 
     // Warranty Check State
     @State private var rawScannedSn: String = ""
@@ -540,6 +542,11 @@ struct ContentView: View {
                 ]
             )
         }
+        .sheet(item: $selectedDeviceDetail) { dev in
+            DeviceDetailView(device: dev) { action in
+                self.handleDeviceDetailAction(action: action, dev: dev)
+            }
+        }
         .sheet(item: $activeModalType) { type in
             switch type {
             case .setDdns:
@@ -808,7 +815,7 @@ struct ContentView: View {
                         .font(.headline)
                         .padding(.horizontal)
 
-                    Button(action: { scanner.startScan() }) {
+                    Button(action: { scanner.startScan(timeout: 6.0) }) {
                         HStack {
                             Spacer()
                             if scanner.isScanning {
@@ -827,6 +834,43 @@ struct ContentView: View {
                     }
                     .padding(.horizontal)
                     .disabled(scanner.isScanning)
+
+                    if !scanner.discoveredDevices.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("S/N Camera phát hiện từ mạng LAN (Nhấn để tra cứu nhanh):")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(scanner.discoveredDevices) { dev in
+                                        if !dev.sn.isEmpty {
+                                            Button(action: {
+                                                let cleaned = self.cleanSerialNumber(dev.sn)
+                                                self.rawScannedSn = dev.sn
+                                                self.cleanedSn = cleaned
+                                                self.triggerDirectWarrantyCheck(sn: cleaned)
+                                            }) {
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "camera.fill")
+                                                    Text("\(dev.ip) (\(dev.sn))")
+                                                }
+                                                .font(.caption2.weight(.bold))
+                                                .padding(.horizontal, 10)
+                                                .padding(.vertical, 6)
+                                                .background(Color.orange.opacity(0.15))
+                                                .foregroundColor(.orange)
+                                                .cornerRadius(8)
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 }
                 .padding(.top, 8)
             }
@@ -927,18 +971,132 @@ struct ContentView: View {
                     .padding(.horizontal)
                 }
 
-                // Discovered Devices Preview
+                // Network Control & Realtime Status Bar
+                VStack(spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Circle()
+                                    .fill(Color.green)
+                                    .frame(width: 8, height: 8)
+                                Text("IP iPhone: \(scanner.localIpAddress)")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            HStack(spacing: 6) {
+                                Text("Dải Subnet:")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                TextField("192.168.1", text: $scanner.targetSubnetPrefix)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .font(.system(.caption, design: .monospaced).weight(.bold))
+                                    .frame(width: 110)
+                                    .keyboardType(.numbersAndPunctuation)
+                            }
+                        }
+
+                        Spacer()
+
+                        Button(action: {
+                            if scanner.isScanning {
+                                scanner.stopScan()
+                            } else {
+                                scanner.startScan(timeout: 6.0)
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                if scanner.isScanning {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.8)
+                                    Text("Dừng")
+                                } else {
+                                    Image(systemName: "antenna.radiowaves.left.and.right")
+                                    Text("Quét")
+                                }
+                            }
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(scanner.isScanning ? Color.red : Color.blue)
+                            .cornerRadius(10)
+                            .shadow(color: (scanner.isScanning ? Color.red : Color.blue).opacity(0.3), radius: 4, y: 2)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 6)
+
+                    // Status Message & Live Log Toggle
+                    HStack {
+                        Text(scanner.statusMessage)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button(action: {
+                            showScannerLogs.toggle()
+                        }) {
+                            Label(showScannerLogs ? "Ẩn Log" : "Xem Log", systemImage: "terminal")
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 6)
+                }
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(12)
+                .padding(.horizontal)
+
+                // Live Terminal Log (Collapsible)
+                if showScannerLogs {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("NHẬT KÝ QUÉT THỜI GIAN THỰC")
+                                .font(.caption2.weight(.bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button("Xóa") {
+                                scanner.scanLogs.removeAll()
+                            }
+                            .font(.caption2)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.top, 4)
+
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(scanner.scanLogs, id: \.self) { log in
+                                    Text(log)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(log.contains(">>>") ? .green : (log.contains("Lỗi") ? .red : .primary))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                            .padding(6)
+                        }
+                        .frame(height: 120)
+                        .background(Color(UIColor.tertiarySystemBackground))
+                        .cornerRadius(6)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                    }
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
+                }
+
+                // Discovered Devices List
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Thiết Bị Phát Hiện (\(scanner.discoveredDevices.count))")
                             .font(.headline)
                         Spacer()
-                        Button(scanner.isScanning ? "Đang quét..." : "Quét ngay 🔄") {
-                            scanner.startScan()
+                        if scanner.isScanning {
+                            ProgressView()
+                                .scaleEffect(0.8)
                         }
-                        .font(.subheadline)
-                        .foregroundColor(.orange)
-                        .disabled(scanner.isScanning)
                     }
                     .padding(.horizontal)
 
@@ -947,11 +1105,11 @@ struct ContentView: View {
                             Image(systemName: "video.slash")
                                 .font(.largeTitle)
                                 .foregroundColor(.gray)
-                            Text("Chưa quét thiết bị nào trong LAN.")
+                            Text(scanner.isScanning ? "Đang dò tìm camera trong mạng..." : "Chưa tìm thấy camera nào.")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            Button("Nhấn vào đây để quét tìm IP Camera ngay") {
-                                scanner.startScan()
+                            Button("Nhấn vào đây để bắt đầu quét ngay") {
+                                scanner.startScan(timeout: 6.0)
                             }
                             .font(.caption)
                             .foregroundColor(.orange)
@@ -963,49 +1121,14 @@ struct ContentView: View {
                         .padding(.horizontal)
                     } else {
                         ForEach(scanner.discoveredDevices) { dev in
-                            HStack {
-                                CameraLogoIcon(brand: dev.brand)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack {
-                                        Text("\(dev.ip):\(dev.port)")
-                                            .font(.headline)
-                                        Text("(\(dev.brand.rawValue))")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    if !dev.sn.isEmpty {
-                                        Text("🔵 S/N: \(dev.sn)")
-                                            .font(.caption)
-                                            .foregroundColor(.blue)
-                                    }
-                                    if !dev.model.isEmpty {
-                                        Text("Model: \(dev.model)")
-                                            .font(.caption2)
-                                            .foregroundColor(.gray)
-                                    }
-                                }
-                                Spacer()
-                                Button(action: {
-                                    self.activeDevice = dev
-                                    self.showActionSheet = true
-                                }) {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "gearshape.fill")
-                                        Text("Cài đặt")
-                                            .font(.caption)
-                                            .bold()
-                                    }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.orange)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
-                                }
-                                .buttonStyle(BorderlessButtonStyle())
+                            DeviceRowView(device: dev) {
+                                self.activeDevice = dev
+                                self.showActionSheet = true
                             }
-                            .padding()
-                            .background(Color(UIColor.secondarySystemBackground))
-                            .cornerRadius(10)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                self.selectedDeviceDetail = dev
+                            }
                             .padding(.horizontal)
                         }
                     }
@@ -1015,7 +1138,7 @@ struct ContentView: View {
         }
     }
 
-    // TAB 1: Sản phẩm (Camera Catalog & Specs)
+        // TAB 1: Sản phẩm (Camera Catalog & Specs)
     var sanPhamView: some View {
         List {
             Section(header: Text("Danh Mục Sản Phẩm Dahua & Imou")) {
@@ -2935,6 +3058,51 @@ struct ContentView: View {
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         ntpCurrentClockStr = formatter.string(from: Date())
     }
+
+    // MARK: - Device Detail Action Handler
+    private func handleDeviceDetailAction(action: String, dev: CameraDevice) {
+        self.activeDevice = dev
+        switch action {
+        case "setDdns":
+            self.ip = dev.ip
+            self.port = "\(dev.port)"
+            self.activeModalType = .setDdns
+        case "changeIp":
+            self.ip = dev.ip
+            self.newIp = dev.ip
+            self.activeModalType = .changeIp
+        case "changePass":
+            self.ip = dev.ip
+            self.activeModalType = .changePass
+        case "rebootDevice":
+            self.ip = dev.ip
+            self.activeModalType = .rebootDevice
+        case "setDateNtp":
+            self.ip = dev.ip
+            self.ntpTargetIp = dev.ip
+            self.ntpHttpPort = "\(dev.port)"
+            self.activeModalType = .setDateNtp
+        case "checkPort":
+            self.checkPortHost = dev.ip
+            self.activeModalType = .checkPort
+        case "qrCode":
+            self.openQrCodeModal(for: dev)
+        case "rtspOnvif":
+            self.rtspTargetIp = dev.ip
+            self.applyDetectedBrand(dev)
+            self.activeModalType = .rtspOnvif
+        case "warranty":
+            if !dev.sn.isEmpty {
+                let cleaned = self.cleanSerialNumber(dev.sn)
+                self.rawScannedSn = dev.sn
+                self.cleanedSn = cleaned
+                self.selectedTab = 2
+                self.triggerDirectWarrantyCheck(sn: cleaned)
+            }
+        default:
+            break
+        }
+    }
 }
 
 // MARK: - Super Password Row Component
@@ -3414,4 +3582,256 @@ struct BarcodeScannerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
+
+
+// MARK: - Rich Device Row View (Quét IP Camera Dahua & Imou)
+struct DeviceRowView: View {
+    let device: CameraDevice
+    let onSettingsTapped: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(device.brand.rawValue)
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(device.brand.color)
+                    .cornerRadius(4)
+
+                Text(device.machineName.isEmpty ? "Camera" : device.machineName)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text(device.ip)
+                    .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                    .foregroundColor(.primary)
+            }
+
+            HStack {
+                Label(device.serialNo.isEmpty ? "N/A" : device.serialNo, systemImage: "number")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Spacer()
+
+                if !device.mac.isEmpty {
+                    Label(device.mac, systemImage: "network")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text("TCP: \(device.tcpPort)")
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.blue.opacity(0.12))
+                    .foregroundColor(.blue)
+                    .cornerRadius(4)
+
+                Text("HTTP: \(device.httpPort)")
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.12))
+                    .foregroundColor(.green)
+                    .cornerRadius(4)
+
+                Text(device.isInitialized ? "Đã kích hoạt" : "Chưa kích hoạt")
+                    .font(.caption2.weight(.bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(device.isInitialized ? Color.green.opacity(0.15) : Color.orange.opacity(0.2))
+                    .foregroundColor(device.isInitialized ? .green : .orange)
+                    .cornerRadius(4)
+
+                Spacer()
+
+                Button(action: onSettingsTapped) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "gearshape.fill")
+                        Text("Cài đặt")
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.orange)
+                    .cornerRadius(6)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(10)
+    }
+}
+
+// MARK: - Device Detail Modal Sheet (Đầy Đủ Thông Số Như Quét IP Camera Dahua)
+struct DeviceDetailView: View {
+    let device: CameraDevice
+    @Environment(\.presentationMode) var presentationMode
+    @State private var copied: Bool = false
+    var onAction: ((String) -> Void)? = nil
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Thông tin chung")) {
+                    DetailRow(title: "Hãng sản xuất", value: "\(device.brand.rawValue) \(device.vendor.isEmpty ? "" : "(\(device.vendor))")")
+                    DetailRow(title: "Tên Model / Sản phẩm", value: device.machineName)
+                    DetailRow(title: "Loại thiết bị", value: device.deviceClass)
+                    DetailRow(title: "Số Serial (S/N)", value: device.serialNo, isMonospaced: true)
+                    DetailRow(title: "Địa chỉ MAC", value: device.mac, isMonospaced: true)
+                    DetailRow(title: "Firmware", value: device.firmwareVersion.isEmpty ? "N/A" : device.firmwareVersion)
+                    DetailRow(title: "Trạng thái kích hoạt", value: device.isInitialized ? "Đã kích hoạt (Mã: \(device.initVal))" : "Chưa kích hoạt (Mã: \(device.initVal))")
+                }
+
+                Section(header: Text("Cấu hình mạng & Cổng kết nối")) {
+                    DetailRow(title: "Địa chỉ IP (IPv4)", value: device.ip, isMonospaced: true)
+                    DetailRow(title: "Subnet Mask", value: device.subnetMask)
+                    DetailRow(title: "Default Gateway", value: device.gateway)
+                    DetailRow(title: "DHCP", value: device.dhcpEnabled ? "Bật (Enabled)" : "Tắt (Static IP)")
+                    DetailRow(title: "Cổng TCP NetSDK", value: "\(device.tcpPort)")
+                    DetailRow(title: "Cổng Web HTTP", value: "\(device.httpPort)")
+                }
+
+                if let onAction = onAction {
+                    Section(header: Text("Thao tác tiện ích nhanh")) {
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("setDdns")
+                        }) {
+                            Label("Cài Đặt Free DDNS", systemImage: "gearshape.2.fill")
+                                .foregroundColor(.blue)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("changeIp")
+                        }) {
+                            Label("Đổi Địa Chỉ IP", systemImage: "network")
+                                .foregroundColor(.orange)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("changePass")
+                        }) {
+                            Label("Đổi Mật Khẩu Camera", systemImage: "key.fill")
+                                .foregroundColor(.red)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("rebootDevice")
+                        }) {
+                            Label("Khởi Động Lại (Reboot)", systemImage: "arrow.clockwise.circle.fill")
+                                .foregroundColor(.red)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("setDateNtp")
+                        }) {
+                            Label("Cấu Hình Ngày Giờ & NTP", systemImage: "clock.fill")
+                                .foregroundColor(.purple)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("checkPort")
+                        }) {
+                            Label("Kiểm Tra Cổng (Check Port)", systemImage: "antenna.radiowaves.left.and.right")
+                                .foregroundColor(.blue)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("qrCode")
+                        }) {
+                            Label("Tạo Mã QR Code Cài Đặt (S/N)", systemImage: "qrcode")
+                                .foregroundColor(.orange)
+                        }
+
+                        Button(action: {
+                            presentationMode.wrappedValue.dismiss()
+                            onAction("rtspOnvif")
+                        }) {
+                            Label("Trích Xuất Link RTSP & ONVIF", systemImage: "video.fill")
+                                .foregroundColor(.purple)
+                        }
+
+                        if !device.serialNo.isEmpty {
+                            Button(action: {
+                                presentationMode.wrappedValue.dismiss()
+                                onAction("warranty")
+                            }) {
+                                Label("Tra Cứu Bảo Hành Trực Tiếp S/N", systemImage: "shield.checkerboard")
+                                    .foregroundColor(.green)
+                            }
+                        }
+                    }
+                }
+
+                if !device.rawJson.isEmpty {
+                    Section(header: Text("JSON phản hồi gốc (notifyDevInfo)")) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button(action: {
+                                UIPasteboard.general.string = device.rawJson
+                                copied = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    copied = false
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                                    Text(copied ? "Đã sao chép vào bộ nhớ tạm" : "Sao chép toàn bộ JSON")
+                                }
+                                .font(.subheadline.weight(.bold))
+                                .foregroundColor(.blue)
+                            }
+
+                            ScrollView(.horizontal, showsIndicators: true) {
+                                Text(device.rawJson)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .padding(8)
+                                    .background(Color(UIColor.tertiarySystemBackground))
+                                    .cornerRadius(8)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationBarTitle("Chi tiết thiết bị", displayMode: .inline)
+            .navigationBarItems(trailing: Button("Đóng") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+}
+
+struct DetailRow: View {
+    let title: String
+    let value: String
+    var isMonospaced: Bool = false
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(isMonospaced ? .system(.body, design: .monospaced).weight(.bold) : .body)
+                .multilineTextAlignment(.trailing)
+        }
+    }
 }

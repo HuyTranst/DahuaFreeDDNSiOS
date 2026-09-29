@@ -1,0 +1,6 @@
+*.backup.swift
+*_backup.swift
+__pycache__/
+*.pyc
+*.ipa
+.DS_Store

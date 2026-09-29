@@ -22,6 +22,12 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Ứng dụng cần sử dụng Camera để quét mã vạch / QR Code chứa số Serial (S/N) phục vụ kiểm tra bảo hành camera Dahua &amp; Imou.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Ứng dụng cần quyền truy cập mạng cục bộ để quét và tìm kiếm camera Dahua &amp; Imou trong mạng LAN Wi-Fi.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_dahua._udp</string>
+	</array>
 	<key>CFBundleIconFile</key>
 	<string>logo.png</string>
 	<key>CFBundleIconFiles</key>
