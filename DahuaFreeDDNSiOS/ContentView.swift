@@ -442,15 +442,15 @@ struct ContentView: View {
             }
             .tag(0)
 
-            // Tab 2: Sản phẩm
+            // Tab 2: Check Port
             NavigationView {
-                sanPhamView
-                    .navigationTitle("Sản phẩm")
+                checkPortModalView
+                    .navigationTitle("Check Port")
                     .navigationBarTitleDisplayMode(.inline)
             }
             .tabItem {
-                Image(systemName: "video.fill")
-                Text("Sản phẩm")
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                Text("Check Port")
             }
             .tag(1)
 
@@ -927,44 +927,47 @@ struct ContentView: View {
     var trangChuView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Imou Banner Header
+                // Compact Home Banner (~50% height reduction)
                 ZStack {
-                    LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.85), Color.orange]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .cornerRadius(16)
+                    LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.9), Color.orange]), startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .cornerRadius(12)
 
-                    HStack {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Dahua & Imou Free DDNS")
-                                .font(.title3)
-                                .bold()
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("Công cụ hổ trợ Dahua & Imou")
+                                .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
-
-                            Text("Enjoy Smart Life • Check Bảo Hành & Cài DDNS Tự Động")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(1)
 
                             Button(action: {
-                                selectedTab = 2
+                                if let url = URL(string: "https://zalo.me/0909080119") {
+                                    UIApplication.shared.open(url)
+                                }
                             }) {
-                                Text("Check Bảo Hành S/N 🔍")
-                                    .font(.caption)
-                                    .bold()
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(Color.white)
-                                    .foregroundColor(.orange)
-                                    .cornerRadius(20)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "phone.fill")
+                                        .font(.system(size: 11))
+                                    Text("Zalo :0909.080.119")
+                                        .font(.caption)
+                                        .bold()
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(Color.white)
+                                .foregroundColor(.orange)
+                                .cornerRadius(12)
                             }
-                            .padding(.top, 4)
                         }
                         Spacer()
 
                         CameraLogoIcon(brand: .imou)
-                            .frame(width: 64, height: 64)
+                            .frame(width: 44, height: 44)
                             .background(Color.white)
-                            .cornerRadius(12)
+                            .cornerRadius(10)
+                            .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
                     }
-                    .padding(16)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
                 }
                 .padding(.horizontal)
 
@@ -989,7 +992,7 @@ struct ContentView: View {
 
                     HStack(spacing: 12) {
                         QuickTile(title: "Check Port", icon: "antenna.radiowaves.left.and.right", color: .purple) {
-                            self.activeModalType = .checkPort
+                            selectedTab = 1
                         }
                         QuickTile(title: "Super Pass", icon: "lock.shield.fill", color: .red) {
                             self.activeModalType = .superPassword
@@ -3569,6 +3572,9 @@ struct CameraLogoIcon: View {
         }
         if let uiImage = UIImage(named: "logo") ?? UIImage(named: "camera_logo") {
             return uiImage
+        }
+        if let data = Data(base64Encoded: cameraLogoBase64String), let img = UIImage(data: data) {
+            return img
         }
         return nil
     }()

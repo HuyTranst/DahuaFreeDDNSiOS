@@ -58,9 +58,17 @@ jobs:
           if [ -f "logo.png" ]; then
             cp logo.png Payload/DahuaFreeDDNS.app/logo.png
             cp logo.png Payload/DahuaFreeDDNS.app/AppIcon60x60@2x.png
+            cp logo.png Payload/DahuaFreeDDNS.app/AppIcon60x60@3x.png
             cp logo.png Payload/DahuaFreeDDNS.app/AppIcon76x76@2x.png
             cp logo.png Payload/DahuaFreeDDNS.app/AppIcon.png
           fi
+          for icon in AppIcon.png AppIcon60x60@2x.png AppIcon60x60@3x.png AppIcon76x76@2x.png; do
+            if [ -f "$icon" ]; then
+              cp "$icon" Payload/DahuaFreeDDNS.app/
+            elif [ -f "DahuaFreeDDNSiOS/$icon" ]; then
+              cp "DahuaFreeDDNSiOS/$icon" Payload/DahuaFreeDDNS.app/
+            fi
+          done
           if [ -f "camera_logo.png" ]; then
             cp camera_logo.png Payload/DahuaFreeDDNS.app/
           fi
