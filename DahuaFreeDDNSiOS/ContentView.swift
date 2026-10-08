@@ -617,7 +617,7 @@ struct ContentView: View {
                     .navigationTitle("Trang chủ")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .navigationBarLeading) {
                             cctvToolsMenu
                         }
                     }
@@ -634,7 +634,7 @@ struct ContentView: View {
                     .navigationTitle("Check Port")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .navigationBarLeading) {
                             cctvToolsMenu
                         }
                     }
@@ -651,7 +651,7 @@ struct ContentView: View {
                     .navigationTitle("Check Bảo Hành Camera")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .navigationBarLeading) {
                             cctvToolsMenu
                         }
                     }
@@ -668,7 +668,7 @@ struct ContentView: View {
                     .navigationTitle("Cấu Hình Free DDNS")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .navigationBarLeading) {
                             cctvToolsMenu
                         }
                     }
@@ -906,25 +906,13 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - 3-Line Hamburger Dropdown Menu (Top Right)
+    // MARK: - 3-Line Hamburger Dropdown Menu (Top Left)
     var cctvToolsMenu: some View {
         Menu {
             Button(action: {
                 self.activeModalType = .calcStorage
             }) {
-                Label("TÍNH LƯU TRỮ", systemImage: "internaldrive.fill")
-            }
-
-            Button(action: {
-                self.activeModalType = .calcBandwidth
-            }) {
-                Label("TÍNH BĂNG THÔNG", systemImage: "speedometer")
-            }
-
-            Button(action: {
-                self.activeModalType = .calcData4G
-            }) {
-                Label("TÍNH DATA 4G", systemImage: "antenna.radiowaves.left.and.right")
+                Label("Tính Lưu Trữ , Băng Thông , 4G", systemImage: "function")
             }
         } label: {
             Image(systemName: "line.3.horizontal")
