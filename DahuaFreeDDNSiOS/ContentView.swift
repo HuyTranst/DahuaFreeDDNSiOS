@@ -587,6 +587,9 @@ struct ContentView: View {
         case superPassword
         case qrCodeGenerator(initialSn: String, initialModel: String, initialBrand: String)
         case rtspOnvif
+        case calcStorage
+        case calcBandwidth
+        case calcData4G
 
         var id: String {
             switch self {
@@ -599,6 +602,9 @@ struct ContentView: View {
             case .superPassword: return "superPassword"
             case .qrCodeGenerator(let sn, _, _): return "qrCodeGenerator_\(sn)"
             case .rtspOnvif: return "rtspOnvif"
+            case .calcStorage: return "calcStorage"
+            case .calcBandwidth: return "calcBandwidth"
+            case .calcData4G: return "calcData4G"
             }
         }
     }
@@ -610,6 +616,11 @@ struct ContentView: View {
                 trangChuView
                     .navigationTitle("Trang chủ")
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            cctvToolsMenu
+                        }
+                    }
             }
             .tabItem {
                 Image(systemName: "house.fill")
@@ -622,6 +633,11 @@ struct ContentView: View {
                 checkPortModalView
                     .navigationTitle("Check Port")
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            cctvToolsMenu
+                        }
+                    }
             }
             .tabItem {
                 Image(systemName: "antenna.radiowaves.left.and.right")
@@ -634,6 +650,11 @@ struct ContentView: View {
                 checkBaoHanhView
                     .navigationTitle("Check Bảo Hành Camera")
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            cctvToolsMenu
+                        }
+                    }
             }
             .tabItem {
                 Image(systemName: "qrcode.viewfinder")
@@ -646,6 +667,11 @@ struct ContentView: View {
                 ddnsFormView
                     .navigationTitle("Cấu Hình Free DDNS")
                     .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            cctvToolsMenu
+                        }
+                    }
             }
             .tabItem {
                 Image(systemName: "gearshape.2.fill")
@@ -849,7 +875,63 @@ struct ContentView: View {
                             }
                         }
                 }
+            case .calcStorage:
+                NavigationView {
+                    CctvCalculatorModalView(selectedCalcTool: .storage)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .calcBandwidth:
+                NavigationView {
+                    CctvCalculatorModalView(selectedCalcTool: .bandwidth)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
+            case .calcData4G:
+                NavigationView {
+                    CctvCalculatorModalView(selectedCalcTool: .data4G)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
             }
+        }
+    }
+
+    // MARK: - 3-Line Hamburger Dropdown Menu (Top Right)
+    var cctvToolsMenu: some View {
+        Menu {
+            Button(action: {
+                self.activeModalType = .calcStorage
+            }) {
+                Label("TÍNH LƯU TRỮ", systemImage: "internaldrive.fill")
+            }
+
+            Button(action: {
+                self.activeModalType = .calcBandwidth
+            }) {
+                Label("TÍNH BĂNG THÔNG", systemImage: "speedometer")
+            }
+
+            Button(action: {
+                self.activeModalType = .calcData4G
+            }) {
+                Label("TÍNH DATA 4G", systemImage: "antenna.radiowaves.left.and.right")
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.orange)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
         }
     }
 
@@ -4850,3 +4932,1515 @@ struct DetailRow: View {
         }
     }
 }
+
+// ==============================================================================
+// MARK: - CCTV CALCULATOR TOOLS (LƯU TRỮ, BĂNG THÔNG, DATA 4G)
+// ==============================================================================
+
+enum CctvCalcToolType: String, CaseIterable, Identifiable {
+    case storage = "TÍNH LƯU TRỮ"
+    case bandwidth = "TÍNH BĂNG THÔNG"
+    case data4G = "TÍNH DATA 4G"
+
+    var id: String { rawValue }
+    var iconName: String {
+        switch self {
+        case .storage: return "internaldrive.fill"
+        case .bandwidth: return "speedometer"
+        case .data4G: return "antenna.radiowaves.left.and.right"
+        }
+    }
+}
+
+struct CctvCalcConstants {
+    static let resolutions: [String] = [
+        "CIF (352 x 288)",
+        "VGA (640 x 480)",
+        "D1 (704 x 576)",
+        "960H (960 x 756)",
+        "1MP (1280 x 720)",
+        "1.3MP (1280 x 960)",
+        "2M-N (1080 x 960)",
+        "2MP (1920 x 1080)",
+        "3MP (2304 x 1296)",
+        "4M-N (1280 x 1440)",
+        "4MP (2688 x 1520)",
+        "5M-N (1296 x 1944)",
+        "5MP (2592 x 1944)",
+        "6MP (3072 x 2048)",
+        "8M-N (1920 x 2160)",
+        "8MP (3840 x 2160)",
+        "12MP (4000 x 3000)"
+    ]
+
+    static let compressions: [String] = [
+        "H.265+",
+        "H.265",
+        "H.264+",
+        "H.264"
+    ]
+
+    // Bandwidth bitrates
+    static let bandwidthH265: [Int] = [128, 256, 464, 768, 768, 1024, 1440, 1440, 2048, 2560, 2560, 3660, 3660, 4158, 5082, 5082, 6540]
+    static let bandwidthH264: [Int] = [256, 512, 768, 1792, 1792, 2048, 4096, 4096, 5120, 6656, 6656, 9216, 9216, 11264, 15360, 15360, 22528]
+
+    static func defaultBandwidthBitrate(resIdx: Int, compIdx: Int) -> Int {
+        let r = max(0, min(resIdx, resolutions.count - 1))
+        let map = compIdx <= 1 ? bandwidthH265 : bandwidthH264
+        return r < map.count ? map[r] : 1440
+    }
+
+    // Storage / Disk & 4G bitrates list
+    static let bitrateList: [Int] = [128, 192, 256, 320, 512, 640, 768, 896, 1024, 1280, 1536, 1792, 2048, 3072, 4096, 5120, 6144, 7168, 8192]
+
+    // Storage maps
+    static let storageH265Map: [Int] = [0, 1, 3, 3, 5, 5, 5, 8, 9, 11, 13, 13, 13, 13, 14, 14, 14]
+    static let storageH264Map: [Int] = [12, 3, 5, 5, 9, 9, 9, 12, 12, 13, 14, 14, 15, 15, 16, 18, 18]
+
+    static func defaultStorageBitrate(resIdx: Int, compIdx: Int) -> Int {
+        let r = max(0, min(resIdx, resolutions.count - 1))
+        let map = compIdx <= 1 ? storageH265Map : storageH264Map
+        let bIdx = r < map.count ? map[r] : 8
+        return bitrateList[min(bIdx, bitrateList.count - 1)]
+    }
+
+    // 4G data maps
+    static let data4GH265Map: [Int] = [0, 2, 3, 3, 5, 5, 5, 8, 8, 10, 10, 10, 12, 12, 14, 14, 14, 16]
+    static let data4GH264Map: [Int] = [2, 4, 5, 5, 9, 9, 9, 12, 12, 14, 15, 15, 16, 16, 17, 18, 18, 18]
+
+    static func default4GBitrate(resIdx: Int, compIdx: Int) -> Int {
+        let r = max(0, min(resIdx, resolutions.count - 1))
+        let map = compIdx <= 1 ? data4GH265Map : data4GH264Map
+        let bIdx = r < map.count ? map[r] : 8
+        return bitrateList[min(bIdx, bitrateList.count - 1)]
+    }
+
+    static func fmtNumber(_ num: Double, decimals: Int = 2) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = decimals
+        formatter.minimumFractionDigits = (decimals == 0) ? 0 : 1
+        formatter.groupingSeparator = "."
+        formatter.decimalSeparator = ","
+        return formatter.string(from: NSNumber(value: num)) ?? String(format: "%.\(decimals)f", num)
+    }
+
+    static func formatDuration(minutes: Double) -> String {
+        let d = Int(minutes / 1440.0)
+        let h = Int(minutes.truncatingRemainder(dividingBy: 1440.0) / 60.0)
+        let m = Int(minutes.truncatingRemainder(dividingBy: 60.0).rounded())
+        var res = ""
+        if d > 0 { res += "\(d) ngày " }
+        if h > 0 { res += "\(h) giờ " }
+        if m > 0 || res.isEmpty { res += "\(m) phút" }
+        return res.trimmingCharacters(in: .whitespaces)
+    }
+}
+
+struct MultiCameraRowItem: Identifiable {
+    let id = UUID()
+    var name: String
+    var resIdx: Int
+    var compIdx: Int
+    var bitrate: Int
+    var streams: Int = 1
+    var qty: Int = 1
+}
+
+// MARK: - Root Modal Container View
+struct CctvCalculatorModalView: View {
+    @State var selectedCalcTool: CctvCalcToolType = .storage
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Top Tab Picker between the 3 calculators
+            Picker("Công Cụ", selection: $selectedCalcTool) {
+                ForEach(CctvCalcToolType.allCases) { tool in
+                    Text(tool.rawValue.replacingOccurrences(of: "TÍNH ", with: "")).tag(tool)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .background(Color(UIColor.secondarySystemBackground))
+
+            // Body Switch
+            Group {
+                switch selectedCalcTool {
+                case .storage:
+                    DiskStorageCalculatorView()
+                case .bandwidth:
+                    BandwidthCalculatorView()
+                case .data4G:
+                    Data4GCalculatorView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .navigationTitle(selectedCalcTool.rawValue)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - 1. TÍNH BĂNG THÔNG
+struct BandwidthCalculatorView: View {
+    @State private var subTab: Int = 0 // 0: Camera giống nhau, 1: Nhiều loại camera
+
+    // Tab 1 (Single)
+    @State private var t1Camera: String = "1"
+    @State private var t1ResIdx: Int = 7 // 2MP
+    @State private var t1CompIdx: Int = 0 // H.265+
+    @State private var t1Bitrate: String = "1440"
+    @State private var t1Streams: String = "1"
+
+    // Tab 2 (Multi)
+    @State private var t2Rows: [MultiCameraRowItem] = [
+        MultiCameraRowItem(name: "Camera trong nhà", resIdx: 7, compIdx: 0, bitrate: 1440, streams: 1, qty: 1),
+        MultiCameraRowItem(name: "Camera ngoài trời", resIdx: 10, compIdx: 0, bitrate: 2560, streams: 1, qty: 1)
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Subtab Switcher
+                Picker("Loại", selection: $subTab) {
+                    Text("Camera giống nhau").tag(0)
+                    Text("Nhiều loại camera").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+
+                if subTab == 0 {
+                    tab1SingleView
+                } else {
+                    tab2MultiView
+                }
+            }
+            .padding(.vertical)
+        }
+    }
+
+    private var tab1SingleView: some View {
+        VStack(spacing: 14) {
+            Text("Cung cấp thông tin cấu hình Camera để tính toán lượng băng thông mạng cần thiết.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Số lượng Camera:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1Camera)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 90)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack {
+                    Text("Độ phân giải:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1ResIdx) {
+                        ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { idx in
+                            Text(CctvCalcConstants.resolutions[idx]).tag(idx)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: t1ResIdx) { _ in
+                        t1Bitrate = "\(CctvCalcConstants.defaultBandwidthBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx))"
+                    }
+                }
+
+                HStack {
+                    Text("Chuẩn nén:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1CompIdx) {
+                        ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { idx in
+                            Text(CctvCalcConstants.compressions[idx]).tag(idx)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: t1CompIdx) { _ in
+                        t1Bitrate = "\(CctvCalcConstants.defaultBandwidthBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx))"
+                    }
+                }
+
+                HStack {
+                    Text("Bitrate (Kbps):")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1440", text: $t1Bitrate)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 90)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack {
+                    Text("Số kênh Stream:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1Streams)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 90)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(14)
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(12)
+            .padding(.horizontal)
+
+            let camera = max(1.0, Double(t1Camera) ?? 1.0)
+            let bitrate = max(1.0, Double(t1Bitrate) ?? 1440.0)
+            let streams = max(1.0, Double(t1Streams) ?? 1.0)
+            let totalKbps = camera * streams * bitrate
+            let mbps = totalKbps / 1000.0
+            let gbps = totalKbps / 1000000.0
+
+            VStack(spacing: 8) {
+                Text("BĂNG THÔNG YÊU CẦU")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.secondary)
+
+                HStack(spacing: 6) {
+                    Text(CctvCalcConstants.fmtNumber(mbps, decimals: 3))
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("Mbps")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.orange)
+
+                    Text("|")
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+
+                    Text(CctvCalcConstants.fmtNumber(gbps, decimals: 4))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("Gbps")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.orange)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.orange.opacity(0.12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
+    }
+
+    private var tab2MultiView: some View {
+        VStack(spacing: 14) {
+            Text("Tính băng thông cho nhiều nhóm Camera với cấu hình riêng biệt.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            ForEach(t2Rows.indices, id: \.self) { idx in
+                VStack(spacing: 10) {
+                    HStack {
+                        Text("#\(idx + 1)")
+                            .font(.caption.bold())
+                            .foregroundColor(.orange)
+                        TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Spacer()
+                        if t2Rows.count > 1 {
+                            Button(action: { t2Rows.remove(at: idx) }) {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
+                            ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
+                                Text(CctvCalcConstants.resolutions[r]).tag(r)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: t2Rows[idx].resIdx) { _ in
+                            t2Rows[idx].bitrate = CctvCalcConstants.defaultBandwidthBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
+                        }
+
+                        Spacer()
+
+                        Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
+                            ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
+                                Text(CctvCalcConstants.compressions[c]).tag(c)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: t2Rows[idx].compIdx) { _ in
+                            t2Rows[idx].bitrate = CctvCalcConstants.defaultBandwidthBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
+                        }
+                    }
+
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Text("Kbps:")
+                                .font(.caption)
+                            TextField("1440", value: $t2Rows[idx].bitrate, formatter: NumberFormatter())
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 70)
+                        }
+
+                        HStack(spacing: 4) {
+                            Text("Stream:")
+                                .font(.caption)
+                            TextField("1", value: $t2Rows[idx].streams, formatter: NumberFormatter())
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 45)
+                        }
+
+                        HStack(spacing: 4) {
+                            Text("Số cam:")
+                                .font(.caption)
+                            TextField("1", value: $t2Rows[idx].qty, formatter: NumberFormatter())
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 45)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            }
+
+            Button(action: {
+                let nextStt = t2Rows.count + 1
+                t2Rows.append(MultiCameraRowItem(name: "Camera nhóm \(nextStt)", resIdx: 7, compIdx: 0, bitrate: 1440, streams: 1, qty: 1))
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Thêm Nhóm Camera")
+                }
+                .font(.subheadline.bold())
+                .foregroundColor(.orange)
+                .padding(.vertical, 8)
+            }
+
+            let totalMbps = t2Rows.reduce(0.0) { sum, row in
+                sum + (Double(max(1, row.qty) * max(1, row.streams) * max(1, row.bitrate)) / 1000.0)
+            }
+            let totalGbps = totalMbps / 1000.0
+
+            VStack(spacing: 8) {
+                Text("KẾT QUẢ TỪNG NHÓM CAMERA")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.secondary)
+
+                ForEach(t2Rows) { row in
+                    let mbpsCam = Double(max(1, row.streams) * max(1, row.bitrate)) / 1000.0
+                    let mbpsGroup = Double(max(1, row.qty) * max(1, row.streams) * max(1, row.bitrate)) / 1000.0
+                    HStack {
+                        Text(row.name.isEmpty ? "Camera" : row.name)
+                            .font(.caption.bold())
+                            .lineLimit(1)
+                        Spacer()
+                        Text("\(CctvCalcConstants.fmtNumber(mbpsCam, decimals: 2)) Mbps/cam")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("➜ \(CctvCalcConstants.fmtNumber(mbpsGroup, decimals: 2)) Mbps")
+                            .font(.caption.bold())
+                            .foregroundColor(.orange)
+                    }
+                    Divider()
+                }
+
+                HStack {
+                    Text("Tổng Băng Thông:")
+                        .font(.subheadline.bold())
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(CctvCalcConstants.fmtNumber(totalMbps, decimals: 3)) Mbps")
+                            .font(.headline.bold())
+                            .foregroundColor(.red)
+                        Text("\(CctvCalcConstants.fmtNumber(totalGbps, decimals: 4)) Gbps")
+                            .font(.caption.bold())
+                            .foregroundColor(.orange)
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .padding()
+            .background(Color.orange.opacity(0.12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+            .cornerRadius(12)
+            .padding(.horizontal)
+        }
+    }
+}
+
+// MARK: - 2. TÍNH LƯU TRỮ
+struct DiskStorageCalculatorView: View {
+    @State private var subTab: Int = 0 // 0: Cam giống nhau, 1: Nhiều loại cam, 2: Theo RAID
+
+    // Tab 1
+    @State private var t1Camera: String = "1"
+    @State private var t1ResIdx: Int = 7 // 2MP
+    @State private var t1CompIdx: Int = 0 // H.265+
+    @State private var t1Bitrate: Int = 1024
+    @State private var t1CalcMode: Int = 0 // 0: Theo ngày, 1: Theo ổ cứng
+    @State private var t1DayInput: String = "30"
+    @State private var t1DiskInput: String = "1"
+    @State private var t1DiskUnit: Int = 0 // 0: TB, 1: GB
+
+    // Tab 2
+    @State private var t2Rows: [MultiCameraRowItem] = [
+        MultiCameraRowItem(name: "Camera trong nhà", resIdx: 7, compIdx: 0, bitrate: 1024, qty: 1),
+        MultiCameraRowItem(name: "Camera ngoài trời", resIdx: 10, compIdx: 0, bitrate: 2048, qty: 1)
+    ]
+    @State private var t2CalcMode: Int = 0 // 0: Theo ngày, 1: Theo ổ cứng
+    @State private var t2DayInput: String = "30"
+    @State private var t2DiskInput: String = "1"
+    @State private var t2DiskUnit: Int = 0 // 0: TB, 1: GB
+
+    // Tab 3 (RAID)
+    @State private var raidRows: [MultiCameraRowItem] = [
+        MultiCameraRowItem(name: "Camera trong nhà", resIdx: 7, compIdx: 0, bitrate: 1024, qty: 2),
+        MultiCameraRowItem(name: "Camera ngoài trời", resIdx: 10, compIdx: 0, bitrate: 2048, qty: 2)
+    ]
+    @State private var raidMode: Int = 0 // 0: Theo số ngày, 1: Số ổ cứng cần dùng
+    @State private var raidType: Int = 5 // 0: RAID 0, 1: RAID 1, 5: RAID 5, 6: RAID 6, 10: RAID 10
+    @State private var diskSizeTB: String = "4"
+    @State private var dynamicValue: String = "4" // mode 0: 4 drives, mode 1: 30 days
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Subtab Switcher
+                Picker("Chế độ", selection: $subTab) {
+                    Text("Cam giống nhau").tag(0)
+                    Text("Nhiều loại cam").tag(1)
+                    Text("Theo RAID").tag(2)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+
+                if subTab == 0 {
+                    tab1SingleView
+                } else if subTab == 1 {
+                    tab2MultiView
+                } else {
+                    tab3RaidView
+                }
+            }
+            .padding(.vertical)
+        }
+    }
+
+    private var tab1SingleView: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Số lượng Camera:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1Camera)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack {
+                    Text("Độ phân giải:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1ResIdx) {
+                        ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { idx in
+                            Text(CctvCalcConstants.resolutions[idx]).tag(idx)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: t1ResIdx) { _ in
+                        t1Bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    }
+                }
+
+                HStack {
+                    Text("Chuẩn nén:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1CompIdx) {
+                        ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { idx in
+                            Text(CctvCalcConstants.compressions[idx]).tag(idx)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: t1CompIdx) { _ in
+                        t1Bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    }
+                }
+
+                HStack {
+                    Text("Bitrate (Kbps):")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1Bitrate) {
+                        ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
+                            Text("\(b)").tag(b)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+            }
+            .padding(14)
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(12)
+            .padding(.horizontal)
+
+            // Mode Selector
+            Picker("Phương thức tính", selection: $t1CalcMode) {
+                Text("Tính theo ngày").tag(0)
+                Text("Tính theo ổ cứng").tag(1)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+
+            if t1CalcMode == 0 {
+                HStack {
+                    Text("Số ngày cần lưu:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("30", text: $t1DayInput)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                    Text("ngày")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+
+                let camera = max(1.0, Double(t1Camera) ?? 1.0)
+                let days = max(1.0, Double(t1DayInput) ?? 30.0)
+                let sumBits = camera * days * Double(t1Bitrate) * 86400.0
+                let gb = sumBits / (1024.0 * 1024.0 * 8.0)
+                let tb = gb / 1024.0
+
+                VStack(spacing: 6) {
+                    Text("DUNG LƯỢNG LƯU TRỮ CẦN THIẾT")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 8) {
+                        Text("\(CctvCalcConstants.fmtNumber(gb)) GB")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.red)
+                        Text("|")
+                            .foregroundColor(.secondary)
+                        Text("\(CctvCalcConstants.fmtNumber(tb, decimals: 3)) TB")
+                            .font(.system(size: 22, weight: .bold, design: .rounded))
+                            .foregroundColor(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+
+            } else {
+                HStack {
+                    Text("Dung lượng ổ cứng:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1DiskInput)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 70)
+                        .multilineTextAlignment(.center)
+                    Picker("", selection: $t1DiskUnit) {
+                        Text("TB").tag(0)
+                        Text("GB").tag(1)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 90)
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+
+                let camera = max(1.0, Double(t1Camera) ?? 1.0)
+                let numDisk = max(0.1, Double(t1DiskInput.replacingOccurrences(of: ",", with: ".")) ?? 1.0)
+                let day1 = camera * Double(t1Bitrate) * 86400.0
+                let rs = (t1DiskUnit == 1)
+                    ? (numDisk * (29.0 / 30.0) * 8.0 * 1000.0 * 1024.0 / day1)
+                    : (numDisk * 0.931 * 8.0 * 1000.0 * 1024.0 * 1024.0 / day1)
+                let d = floor(rs)
+                let h = (rs - d) * 24.0
+
+                VStack(spacing: 6) {
+                    Text("THỜI GIAN LƯU TRỮ ƯỚC TÍNH")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(Int(d)) ngày \(String(format: "%.1f", h)) giờ")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    private var tab2MultiView: some View {
+        VStack(spacing: 14) {
+            Picker("Phương thức", selection: $t2CalcMode) {
+                Text("Tính theo ngày").tag(0)
+                Text("Tính theo ổ cứng").tag(1)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+
+            if t2CalcMode == 0 {
+                HStack {
+                    Text("Số ngày cần lưu:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("30", text: $t2DayInput)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                    Text("ngày")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .padding(10)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            } else {
+                HStack {
+                    Text("Dung lượng ổ cứng:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t2DiskInput)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 70)
+                        .multilineTextAlignment(.center)
+                    Picker("", selection: $t2DiskUnit) {
+                        Text("TB").tag(0)
+                        Text("GB").tag(1)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 90)
+                }
+                .padding(10)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            }
+
+            ForEach(t2Rows.indices, id: \.self) { idx in
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("#\(idx + 1)")
+                            .font(.caption.bold())
+                            .foregroundColor(.orange)
+                        TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Spacer()
+                        if t2Rows.count > 1 {
+                            Button(action: { t2Rows.remove(at: idx) }) {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
+                            ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
+                                Text(CctvCalcConstants.resolutions[r]).tag(r)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: t2Rows[idx].resIdx) { _ in
+                            t2Rows[idx].bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
+                        }
+
+                        Spacer()
+
+                        Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
+                            ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
+                                Text(CctvCalcConstants.compressions[c]).tag(c)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: t2Rows[idx].compIdx) { _ in
+                            t2Rows[idx].bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
+                        }
+                    }
+
+                    HStack(spacing: 14) {
+                        HStack(spacing: 4) {
+                            Text("Kbps:")
+                                .font(.caption)
+                            Picker("", selection: $t2Rows[idx].bitrate) {
+                                ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
+                                    Text("\(b)").tag(b)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                        }
+
+                        HStack(spacing: 4) {
+                            Text("Số cam:")
+                                .font(.caption)
+                            TextField("1", value: $t2Rows[idx].qty, formatter: NumberFormatter())
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 50)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            }
+
+            Button(action: {
+                let nextStt = t2Rows.count + 1
+                t2Rows.append(MultiCameraRowItem(name: "Camera nhóm \(nextStt)", resIdx: 7, compIdx: 0, bitrate: 1024, qty: 1))
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Thêm Nhóm Camera")
+                }
+                .font(.subheadline.bold())
+                .foregroundColor(.orange)
+            }
+
+            if t2CalcMode == 0 {
+                let days = max(1.0, Double(t2DayInput) ?? 30.0)
+                let totalGbDay = t2Rows.reduce(0.0) { sum, r in
+                    sum + (Double(max(1, r.qty) * r.bitrate * 86400) / (8.0 * 1024.0 * 1024.0))
+                }
+                let totalGb = totalGbDay * days
+                let totalTb = totalGb / 1024.0
+
+                VStack(spacing: 8) {
+                    Text("DUNG LƯỢNG LƯU TRỮ TỔNG CỘNG")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+
+                    ForEach(t2Rows) { r in
+                        let gbDay = Double(max(1, r.qty) * r.bitrate * 86400) / (8.0 * 1024.0 * 1024.0)
+                        let gbTot = gbDay * days
+                        HStack {
+                            Text(r.name.isEmpty ? "Camera" : r.name)
+                                .font(.caption.bold())
+                            Spacer()
+                            Text("\(CctvCalcConstants.fmtNumber(gbDay)) GB/ngày")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text("➜ \(CctvCalcConstants.fmtNumber(gbTot)) GB")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                        }
+                        Divider()
+                    }
+
+                    HStack {
+                        Text("Tổng Lưu Trữ:")
+                            .font(.subheadline.bold())
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(CctvCalcConstants.fmtNumber(totalGb)) GB")
+                                .font(.headline.bold())
+                                .foregroundColor(.red)
+                            Text("Tương đương \(CctvCalcConstants.fmtNumber(totalTb, decimals: 3)) TB")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            } else {
+                let diskVal = max(0.1, Double(t2DiskInput.replacingOccurrences(of: ",", with: ".")) ?? 1.0)
+                let usableGB = (t2DiskUnit == 1) ? diskVal : (diskVal * 1000.0 * 0.931)
+                let totalGbDay = t2Rows.reduce(0.0) { sum, r in
+                    sum + (Double(max(1, r.qty) * r.bitrate * 86400) / (8.0 * 1024.0 * 1024.0))
+                }
+                let totalDays = totalGbDay > 0 ? (usableGB / totalGbDay) : 0
+                let dInt = Int(floor(totalDays))
+                let dHour = (totalDays - Double(dInt)) * 24.0
+
+                VStack(spacing: 8) {
+                    Text("THỜI GIAN LƯU TRỮ TỔNG CỘNG")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(dInt) ngày \(String(format: "%.1f", dHour)) giờ")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("Hệ thống cần lưu: \(CctvCalcConstants.fmtNumber(totalGbDay)) GB/ngày")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    private var tab3RaidView: some View {
+        VStack(spacing: 14) {
+            Text("Tính toán dung lượng và số lượng ổ cứng theo cụm RAID")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Phương thức tính:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $raidMode) {
+                        Text("Theo số ngày").tag(0)
+                        Text("Số ổ cứng cần dùng").tag(1)
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+
+                HStack {
+                    Text("Loại RAID:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $raidType) {
+                        Text("RAID 0 (không dự phòng)").tag(0)
+                        Text("RAID 1 (dự phòng 50%)").tag(1)
+                        Text("RAID 5 (1 ổ dự phòng)").tag(5)
+                        Text("RAID 6 (2 ổ dự phòng)").tag(6)
+                        Text("RAID 10 (Mirror + Stripe)").tag(10)
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+
+                HStack {
+                    Text("Dung lượng mỗi ổ (TB):")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("4", text: $diskSizeTB)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack {
+                    Text(raidMode == 0 ? "Số ổ cứng trong cụm:" : "Số ngày cần lưu trữ:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField(raidMode == 0 ? "4" : "30", text: $dynamicValue)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(14)
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(12)
+            .padding(.horizontal)
+
+            let diskTB = max(0.5, Double(diskSizeTB.replacingOccurrences(of: ",", with: ".")) ?? 4.0)
+            let diskSizeGB = diskTB * 1000.0 * 0.931
+            let dailyGB = raidRows.reduce(0.0) { sum, r in
+                sum + (Double(max(1, r.qty) * r.bitrate * 86400) / (8.0 * 1024.0 * 1024.0))
+            }
+            let minDrives: Int = (raidType == 5 ? 3 : (raidType == 6 || raidType == 10 ? 4 : 2))
+
+            if raidMode == 0 {
+                let drives = Int(dynamicValue) ?? 4
+                let isEvenReq = (raidType == 1 || raidType == 10)
+                if drives < minDrives {
+                    Text("⚠️ Yêu cầu tối thiểu \(minDrives) ổ cứng cho loại RAID này.")
+                        .font(.caption.bold())
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                } else if isEvenReq && (drives % 2 != 0) {
+                    Text("⚠️ Loại RAID này yêu cầu số ổ cứng phải là số chẵn.")
+                        .font(.caption.bold())
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                } else {
+                    let usableGB: Double = {
+                        switch raidType {
+                        case 0: return Double(drives) * diskSizeGB
+                        case 1: return Double(drives / 2) * diskSizeGB
+                        case 5: return Double(drives - 1) * diskSizeGB
+                        case 6: return Double(drives - 2) * diskSizeGB
+                        case 10: return Double(drives / 2) * diskSizeGB
+                        default: return 0
+                        }
+                    }()
+                    let days = dailyGB > 0 ? (usableGB / dailyGB) : 0
+                    let daysInt = Int(floor(days))
+                    let hours = (days - Double(daysInt)) * 24.0
+
+                    VStack(spacing: 8) {
+                        Text("LƯU ĐƯỢC TỐI ĐA")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(.secondary)
+                        Text("\(daysInt) ngày \(String(format: "%.1f", hours)) giờ")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundColor(.red)
+                        Text("Dung lượng khả dụng cụm RAID: \(CctvCalcConstants.fmtNumber(usableGB / 1024.0)) TB\n(Cần: \(CctvCalcConstants.fmtNumber(dailyGB)) GB/ngày)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.orange.opacity(0.12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                }
+            } else {
+                let targetDays = max(1.0, Double(dynamicValue) ?? 30.0)
+                let requiredGB = dailyGB * targetDays
+                var foundDrives = 0
+                for d in minDrives...64 {
+                    if (raidType == 1 || raidType == 10) && (d % 2 != 0) { continue }
+                    let usable: Double = {
+                        switch raidType {
+                        case 0: return Double(d) * diskSizeGB
+                        case 1: return Double(d / 2) * diskSizeGB
+                        case 5: return Double(d - 1) * diskSizeGB
+                        case 6: return Double(d - 2) * diskSizeGB
+                        case 10: return Double(d / 2) * diskSizeGB
+                        default: return 0
+                        }
+                    }()
+                    if usable >= requiredGB {
+                        foundDrives = d
+                        break
+                    }
+                }
+
+                if foundDrives > 0 {
+                    let actualUsable: Double = {
+                        switch raidType {
+                        case 0: return Double(foundDrives) * diskSizeGB
+                        case 1: return Double(foundDrives / 2) * diskSizeGB
+                        case 5: return Double(foundDrives - 1) * diskSizeGB
+                        case 6: return Double(foundDrives - 2) * diskSizeGB
+                        case 10: return Double(foundDrives / 2) * diskSizeGB
+                        default: return 0
+                        }
+                    }()
+                    let actualDays = dailyGB > 0 ? (actualUsable / dailyGB) : 0
+
+                    VStack(spacing: 8) {
+                        Text("SỐ Ổ CỨNG CẦN DÙNG")
+                            .font(.caption.weight(.bold))
+                            .foregroundColor(.secondary)
+                        Text("\(foundDrives) ổ cứng (\(diskTB) TB/ổ)")
+                            .font(.system(size: 24, weight: .bold, design: .rounded))
+                            .foregroundColor(.red)
+                        Text("Đáp ứng lưu tối thiểu: \(Int(floor(actualDays))) ngày\nDung lượng khả dụng: \(CctvCalcConstants.fmtNumber(actualUsable / 1024.0)) TB")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.orange.opacity(0.12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 3. TÍNH DATA 4G
+struct Data4GCalculatorView: View {
+    @State private var subTab: Int = 0 // 0: Cam giống nhau, 1: Nhiều loại cam
+
+    // Tab 1
+    @State private var t1Camera: String = "1"
+    @State private var t1ResIdx: Int = 7 // 2MP
+    @State private var t1CompIdx: Int = 0 // H.265+
+    @State private var t1Bitrate: Int = 1024
+    @State private var t1CalcMode: Int = 0 // 0: Theo thời gian xem, 1: Theo dung lượng Data
+    @State private var t1TimeVal: String = "1"
+    @State private var t1TimeUnit: Int = 1 // 0: Phút(60), 1: Giờ(3600), 2: Ngày(86400), 3: Tuần, 4: Tháng, 5: Năm
+    @State private var t1DataVal: String = "1"
+    @State private var t1DataUnit: Int = 1 // 0: MB, 1: GB, 2: TB
+
+    // Tab 2
+    @State private var t2Rows: [MultiCameraRowItem] = [
+        MultiCameraRowItem(name: "Camera trong nhà", resIdx: 7, compIdx: 0, bitrate: 1024, qty: 1),
+        MultiCameraRowItem(name: "Camera ngoài trời", resIdx: 10, compIdx: 0, bitrate: 2048, qty: 1)
+    ]
+    @State private var t2CalcMode: Int = 0
+    @State private var t2TimeVal: String = "30"
+    @State private var t2TimeUnit: Int = 0 // 0: Phút, 1: Giờ, 2: Ngày
+    @State private var t2DataVal: String = "1"
+    @State private var t2DataUnit: Int = 1 // 0: MB, 1: GB, 2: TB
+
+    private let timeUnits: [(name: String, seconds: Double)] = [
+        ("Phút", 60.0),
+        ("Giờ", 3600.0),
+        ("Ngày", 86400.0),
+        ("Tuần", 604800.0),
+        ("Tháng", 2592000.0),
+        ("Năm", 31536000.0)
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Picker("Loại", selection: $subTab) {
+                    Text("Camera giống nhau").tag(0)
+                    Text("Nhiều loại camera").tag(1)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+
+                if subTab == 0 {
+                    tab1SingleView
+                } else {
+                    tab2MultiView
+                }
+            }
+            .padding(.vertical)
+        }
+    }
+
+    private var tab1SingleView: some View {
+        VStack(spacing: 14) {
+            Text("Nhập vào dung lượng gói cước Data 4G để tính thời gian xem trực tiếp video")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Số lượng Camera:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1Camera)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 80)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack {
+                    Text("Độ phân giải:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1ResIdx) {
+                        ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { idx in
+                            Text(CctvCalcConstants.resolutions[idx]).tag(idx)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: t1ResIdx) { _ in
+                        t1Bitrate = CctvCalcConstants.default4GBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    }
+                }
+
+                HStack {
+                    Text("Chuẩn nén:")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1CompIdx) {
+                        ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { idx in
+                            Text(CctvCalcConstants.compressions[idx]).tag(idx)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: t1CompIdx) { _ in
+                        t1Bitrate = CctvCalcConstants.default4GBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    }
+                }
+
+                HStack {
+                    Text("Bitrate (Kbps):")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("", selection: $t1Bitrate) {
+                        ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
+                            Text("\(b)").tag(b)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+            }
+            .padding(14)
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(12)
+            .padding(.horizontal)
+
+            Picker("Phương thức tính", selection: $t1CalcMode) {
+                Text("Theo thời gian xem").tag(0)
+                Text("Theo dung lượng Data").tag(1)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+
+            if t1CalcMode == 0 {
+                HStack {
+                    Text("Thời gian xem:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1TimeVal)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 70)
+                        .multilineTextAlignment(.center)
+                    Picker("", selection: $t1TimeUnit) {
+                        ForEach(0..<timeUnits.count, id: \.self) { u in
+                            Text(timeUnits[u].name).tag(u)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+
+                let camera = max(1.0, Double(t1Camera) ?? 1.0)
+                let time = max(0.1, Double(t1TimeVal.replacingOccurrences(of: ",", with: ".")) ?? 1.0)
+                let seconds = timeUnits[min(t1TimeUnit, timeUnits.count - 1)].seconds
+                let totalBits = camera * Double(t1Bitrate) * time * seconds
+                let mb = totalBits / 8.0 / 1024.0
+                let gb = mb / 1024.0
+                let tb = gb / 1024.0
+
+                VStack(spacing: 6) {
+                    Text("CẦN DUNG LƯỢNG DATA")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(CctvCalcConstants.fmtNumber(mb)) MB")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("(\(CctvCalcConstants.fmtNumber(gb, decimals: 3)) GB / \(CctvCalcConstants.fmtNumber(tb, decimals: 4)) TB)")
+                        .font(.caption.bold())
+                        .foregroundColor(.orange)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+
+            } else {
+                HStack {
+                    Text("Dung lượng Data gói cước:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t1DataVal)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 70)
+                        .multilineTextAlignment(.center)
+                    Picker("", selection: $t1DataUnit) {
+                        Text("MB").tag(0)
+                        Text("GB").tag(1)
+                        Text("TB").tag(2)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 120)
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+
+                let camera = max(1.0, Double(t1Camera) ?? 1.0)
+                let dataVal = max(0.1, Double(t1DataVal.replacingOccurrences(of: ",", with: ".")) ?? 1.0)
+                let mult: Double = (t1DataUnit == 0 ? 1.0 : t1DataUnit == 1 ? 1024.0 : 1024.0 * 1024.0)
+                let totalMB = dataVal * mult
+                let bitsPerMin = camera * Double(t1Bitrate) * 60.0
+                let minutes = bitsPerMin > 0 ? (totalMB * 8.0 * 1024.0 / bitsPerMin) : 0
+
+                VStack(spacing: 6) {
+                    Text("THỜI GIAN XEM VIDEO TRỰC TIẾP")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(CctvCalcConstants.fmtNumber(minutes, decimals: 1)) phút")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("(\(CctvCalcConstants.formatDuration(minutes: minutes)))")
+                        .font(.caption.bold())
+                        .foregroundColor(.orange)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            }
+        }
+    }
+
+    private var tab2MultiView: some View {
+        VStack(spacing: 14) {
+            Picker("Phương thức", selection: $t2CalcMode) {
+                Text("Theo thời gian").tag(0)
+                Text("Theo dung lượng").tag(1)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .padding(.horizontal)
+
+            if t2CalcMode == 0 {
+                HStack {
+                    Text("Thời gian xem:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("30", text: $t2TimeVal)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 70)
+                        .multilineTextAlignment(.center)
+                    Picker("", selection: $t2TimeUnit) {
+                        Text("Phút").tag(0)
+                        Text("Giờ").tag(1)
+                        Text("Ngày").tag(2)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 140)
+                }
+                .padding(10)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            } else {
+                HStack {
+                    Text("Dung lượng Data:")
+                        .font(.subheadline)
+                    Spacer()
+                    TextField("1", text: $t2DataVal)
+                        .keyboardType(.decimalPad)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .frame(width: 70)
+                        .multilineTextAlignment(.center)
+                    Picker("", selection: $t2DataUnit) {
+                        Text("MB").tag(0)
+                        Text("GB").tag(1)
+                        Text("TB").tag(2)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 120)
+                }
+                .padding(10)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            }
+
+            ForEach(t2Rows.indices, id: \.self) { idx in
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("#\(idx + 1)")
+                            .font(.caption.bold())
+                            .foregroundColor(.orange)
+                        TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Spacer()
+                        if t2Rows.count > 1 {
+                            Button(action: { t2Rows.remove(at: idx) }) {
+                                Image(systemName: "trash.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
+                            ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
+                                Text(CctvCalcConstants.resolutions[r]).tag(r)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: t2Rows[idx].resIdx) { _ in
+                            t2Rows[idx].bitrate = CctvCalcConstants.default4GBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
+                        }
+
+                        Spacer()
+
+                        Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
+                            ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
+                                Text(CctvCalcConstants.compressions[c]).tag(c)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: t2Rows[idx].compIdx) { _ in
+                            t2Rows[idx].bitrate = CctvCalcConstants.default4GBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
+                        }
+                    }
+
+                    HStack(spacing: 14) {
+                        HStack(spacing: 4) {
+                            Text("Kbps:")
+                                .font(.caption)
+                            Picker("", selection: $t2Rows[idx].bitrate) {
+                                ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
+                                    Text("\(b)").tag(b)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                        }
+
+                        HStack(spacing: 4) {
+                            Text("Số cam:")
+                                .font(.caption)
+                            TextField("1", value: $t2Rows[idx].qty, formatter: NumberFormatter())
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .frame(width: 50)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color(UIColor.secondarySystemBackground))
+                .cornerRadius(10)
+                .padding(.horizontal)
+            }
+
+            Button(action: {
+                let nextStt = t2Rows.count + 1
+                t2Rows.append(MultiCameraRowItem(name: "Camera nhóm \(nextStt)", resIdx: 7, compIdx: 0, bitrate: 1024, qty: 1))
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Thêm Nhóm Camera")
+                }
+                .font(.subheadline.bold())
+                .foregroundColor(.orange)
+            }
+
+            if t2CalcMode == 0 {
+                let time = max(0.1, Double(t2TimeVal.replacingOccurrences(of: ",", with: ".")) ?? 30.0)
+                let seconds: Double = (t2TimeUnit == 0 ? 60.0 : t2TimeUnit == 1 ? 3600.0 : 86400.0)
+                let totalMB = t2Rows.reduce(0.0) { sum, r in
+                    sum + (Double(max(1, r.qty) * r.bitrate) * time * seconds / 8.0 / 1024.0)
+                }
+                let totalGB = totalMB / 1024.0
+                let totalTB = totalGB / 1024.0
+
+                VStack(spacing: 8) {
+                    Text("TỔNG DATA 4G TIÊU THỤ")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+
+                    ForEach(t2Rows) { r in
+                        let mbCam = (Double(r.bitrate) * time * seconds / 8.0 / 1024.0)
+                        let mbGroup = mbCam * Double(max(1, r.qty))
+                        HStack {
+                            Text(r.name.isEmpty ? "Camera" : r.name)
+                                .font(.caption.bold())
+                            Spacer()
+                            Text("\(CctvCalcConstants.fmtNumber(mbCam)) MB/cam")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text("➜ \(CctvCalcConstants.fmtNumber(mbGroup)) MB")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                        }
+                        Divider()
+                    }
+
+                    HStack {
+                        Text("Tổng Cần:")
+                            .font(.subheadline.bold())
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(CctvCalcConstants.fmtNumber(totalMB)) MB")
+                                .font(.headline.bold())
+                                .foregroundColor(.red)
+                            Text("(\(CctvCalcConstants.fmtNumber(totalGB, decimals: 3)) GB / \(CctvCalcConstants.fmtNumber(totalTB, decimals: 4)) TB)")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            } else {
+                let dataVal = max(0.1, Double(t2DataVal.replacingOccurrences(of: ",", with: ".")) ?? 1.0)
+                let mult: Double = (t2DataUnit == 0 ? 1.0 : t2DataUnit == 1 ? 1024.0 : 1024.0 * 1024.0)
+                let totalMB = dataVal * mult
+                let totalKbps = t2Rows.reduce(0.0) { sum, r in
+                    sum + Double(max(1, r.qty) * r.bitrate)
+                }
+                let bitsPerMin = totalKbps * 60.0
+                let totalMinutes = bitsPerMin > 0 ? (totalMB * 8.0 * 1024.0 / bitsPerMin) : 0
+
+                VStack(spacing: 8) {
+                    Text("THỜI GIAN XEM VIDEO TỔNG CỘNG")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(CctvCalcConstants.fmtNumber(totalMinutes, decimals: 1)) phút")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("(\(CctvCalcConstants.formatDuration(minutes: totalMinutes)))")
+                        .font(.caption.bold())
+                        .foregroundColor(.orange)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            }
+        }
+    }
+}
+
