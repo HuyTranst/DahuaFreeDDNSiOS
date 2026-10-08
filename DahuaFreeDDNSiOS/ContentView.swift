@@ -390,6 +390,16 @@ struct ContentView: View {
     @State private var superPassCode2: String = ""
     @State private var superPassCode3: String = ""
 
+    // Google Account & Authentication State (Menu Tôi)
+    @ObservedObject private var authManager = AuthManager.shared
+    @State private var authSelectedTab: Int = 0 // 0: Đăng Nhập, 1: Đăng Ký
+    @State private var authUsername: String = ""
+    @State private var authPassword: String = ""
+    @State private var authConfirmPassword: String = ""
+    @State private var authShowPassword: Bool = false
+    @State private var authShowConfirmPassword: Bool = false
+    @State private var showLogoutAlert: Bool = false
+
     enum StatusType {
         case info, success, error
 
@@ -1365,76 +1375,633 @@ struct ContentView: View {
         }
     }
 
-    // TAB 4: Tôi (Profile & Utilities View)
+    // MARK: - TAB 4: Tôi (Hệ Thống Đăng Nhập & Quản Lý Bản Quyền Pro)
     var toiView: some View {
-        Form {
-            Section(header: Text("Tài khoản & Thiết lập")) {
-                HStack(spacing: 12) {
-                    CameraLogoIcon(brand: .dahua)
-                        .frame(width: 50, height: 50)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Dahua & Imou Manager")
-                            .font(.headline)
-                        Text("Phiên bản 1.0.0 (Check Bảo Hành API & Free DDNS)")
+        ScrollView {
+            VStack(spacing: 20) {
+                if authManager.isLoggedIn {
+                    loggedInProfileView
+                } else {
+                    loggedOutAuthFormView
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
+        }
+        .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
+    }
+
+    // Giao diện khi CHƯA đăng nhập
+    private var loggedOutAuthFormView: some View {
+        VStack(spacing: 20) {
+            // Header Card hoành tráng
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.orange.opacity(0.9), Color(hex: "f59e0b")]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 76, height: 76)
+                        .shadow(color: Color.orange.opacity(0.35), radius: 8, x: 0, y: 4)
+
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(.white)
+                }
+                .padding(.top, 8)
+
+                Text("HỆ THỐNG TÀI KHOẢN PRO")
+                    .font(.title3.weight(.bold))
+                    .foregroundColor(.primary)
+
+                Text("Đăng nhập để kích hoạt Bản Quyền PRO, tích điểm và mở khóa không giới hạn toàn bộ tiện ích Dahua & Imou.")
+                    .font(.footnote)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 16)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+
+            // Segmented Picker (Đăng Nhập / Đăng Ký)
+            HStack(spacing: 0) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        authSelectedTab = 0
+                        authManager.errorMessage = nil
+                        authManager.successMessage = nil
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "key.fill")
+                        Text("Đăng Nhập")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(authSelectedTab == 0 ? Color.orange : Color.clear)
+                    .foregroundColor(authSelectedTab == 0 ? .white : .secondary)
+                    .cornerRadius(10)
+                }
+
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        authSelectedTab = 1
+                        authManager.errorMessage = nil
+                        authManager.successMessage = nil
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.badge.plus.fill")
+                        Text("Đăng Ký Mới")
+                            .font(.subheadline.weight(.bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(authSelectedTab == 1 ? Color.orange : Color.clear)
+                    .foregroundColor(authSelectedTab == 1 ? .white : .secondary)
+                    .cornerRadius(10)
+                }
+            }
+            .padding(4)
+            .background(Color(UIColor.tertiarySystemGroupedBackground))
+            .cornerRadius(12)
+
+            // Form Inputs Card
+            VStack(spacing: 14) {
+                // Ô nhập Tên đăng nhập
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("TÊN ĐĂNG NHẬP")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.fill")
+                            .foregroundColor(.orange)
+                            .frame(width: 20)
+
+                        TextField("Nhập tên đăng nhập...", text: $authUsername)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .font(.system(.body, design: .default))
+
+                        if !authUsername.isEmpty {
+                            Button(action: { authUsername = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray.opacity(0.6))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color(UIColor.tertiarySystemGroupedBackground))
+                    .cornerRadius(10)
+                }
+
+                // Ô nhập Mật khẩu
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("MẬT KHẨU")
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "lock.fill")
+                            .foregroundColor(.orange)
+                            .frame(width: 20)
+
+                        if authShowPassword {
+                            TextField("Nhập mật khẩu...", text: $authPassword)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                                .font(.system(.body, design: .default))
+                        } else {
+                            SecureField("Nhập mật khẩu...", text: $authPassword)
+                                .font(.system(.body, design: .default))
+                        }
+
+                        Button(action: { authShowPassword.toggle() }) {
+                            Image(systemName: authShowPassword ? "eye.fill" : "eye.slash.fill")
+                                .foregroundColor(.gray.opacity(0.7))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color(UIColor.tertiarySystemGroupedBackground))
+                    .cornerRadius(10)
+                }
+
+                // Nếu là Tab Đăng Ký -> Thêm ô Xác nhận mật khẩu
+                if authSelectedTab == 1 {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("XÁC NHẬN MẬT KHẨU")
+                            .font(.caption2.weight(.bold))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.shield.fill")
+                                .foregroundColor(.orange)
+                                .frame(width: 20)
+
+                            if authShowConfirmPassword {
+                                TextField("Nhập lại mật khẩu...", text: $authConfirmPassword)
+                                    .autocapitalization(.none)
+                                    .disableAutocorrection(true)
+                                    .font(.system(.body, design: .default))
+                            } else {
+                                SecureField("Nhập lại mật khẩu...", text: $authConfirmPassword)
+                                    .font(.system(.body, design: .default))
+                            }
+
+                            Button(action: { authShowConfirmPassword.toggle() }) {
+                                Image(systemName: authShowConfirmPassword ? "eye.fill" : "eye.slash.fill")
+                                    .foregroundColor(.gray.opacity(0.7))
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color(UIColor.tertiarySystemGroupedBackground))
+                        .cornerRadius(10)
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+
+            // Thông báo lỗi nếu có
+            if let err = authManager.errorMessage, !err.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(err)
+                        .font(.footnote)
+                        .foregroundColor(.red)
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(10)
+            }
+
+            // Thông báo thành công nếu có
+            if let succ = authManager.successMessage, !succ.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text(succ)
+                        .font(.footnote)
+                        .foregroundColor(.green)
+                    Spacer()
+                }
+                .padding(12)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(10)
+            }
+
+            // Nút bấm thực hiện Đăng nhập / Đăng ký theo phong cách Form chính (Gradient cam vàng)
+            Button(action: {
+                handleAuthAction()
+            }) {
+                HStack(spacing: 8) {
+                    Spacer()
+                    if authManager.isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.9)
+                        Text("ĐANG XỬ LÝ...")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.white)
+                    } else {
+                        Image(systemName: authSelectedTab == 0 ? "arrow.right.circle.fill" : "person.badge.plus")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white)
+                        Text(authSelectedTab == 0 ? "ĐĂNG NHẬP NGAY" : "ĐĂNG KÝ TÀI KHOẢN")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.white)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.orange, Color(hex: "f59e0b")]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+                .shadow(color: Color.orange.opacity(0.3), radius: 6, x: 0, y: 3)
+            }
+            .disabled(authManager.isLoading)
+
+            // Thẻ ghi chú bảo mật & Quyền lợi VIP
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundColor(.orange)
+                    Text("Đặc Quyền Tài Khoản Pro:")
+                        .font(.footnote.weight(.bold))
+                        .foregroundColor(.primary)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•").foregroundColor(.orange)
+                        Text("Lưu phiên cục bộ 5 ngày: Tự động đăng nhập siêu tốc, không cần kết nối mạng liên tục.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•").foregroundColor(.orange)
+                        Text("Đồng bộ & mã hóa đám mây an toàn: Bảo mật mật khẩu SHA-256 tuyệt đối.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•").foregroundColor(.orange)
+                        Text("Hỗ trợ mở khóa Bản Quyền Pro & gia hạn nhanh qua Zalo quản trị.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.vertical, 4)
-            }
 
-            Section(header: Text("Tiện ích quản trị Camera")) {
-                Button(action: {
-                    self.activeModalType = .changeIp
-                }) {
-                    HStack {
-                        Image(systemName: "network")
-                            .foregroundColor(.orange)
-                        Text("Đổi địa chỉ IP Camera")
-                            .foregroundColor(.primary)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
-                }
+                Divider().padding(.vertical, 4)
 
                 Button(action: {
-                    self.activeModalType = .changePass
+                    if let url = URL(string: "https://zalo.me/0909080119") {
+                        UIApplication.shared.open(url)
+                    }
                 }) {
                     HStack {
-                        Image(systemName: "key.fill")
-                            .foregroundColor(.orange)
-                        Text("Đổi mật khẩu Camera")
-                            .foregroundColor(.primary)
                         Spacer()
-                        Image(systemName: "chevron.right")
+                        Image(systemName: "phone.fill")
                             .font(.caption)
-                            .foregroundColor(.gray)
+                        Text("Cần cấp quyền Pro? Liên hệ Zalo: 0909.080.119")
+                            .font(.caption.weight(.bold))
+                        Spacer()
+                    }
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.12))
+                    .foregroundColor(.orange)
+                    .cornerRadius(8)
+                }
+            }
+            .padding(16)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+        }
+    }
+
+    // Giao diện khi ĐÃ đăng nhập (Bảng điều khiển Profile VIP)
+    private var loggedInProfileView: some View {
+        VStack(spacing: 20) {
+            // VIP Member Profile Card
+            VStack(spacing: 16) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.orange, Color(hex: "f59e0b")]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 60, height: 60)
+                            .shadow(color: Color.orange.opacity(0.3), radius: 6, x: 0, y: 3)
+
+                        Image(systemName: authManager.role == "PRO" || authManager.role == "ADMIN" ? "crown.fill" : "person.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(authManager.username)
+                            .font(.title3.weight(.bold))
+                            .foregroundColor(.primary)
+
+                        HStack(spacing: 6) {
+                            if authManager.role == "PRO" {
+                                Text("👑 BẢN QUYỀN PRO VIP")
+                                    .font(.caption2.weight(.bold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.orange)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(6)
+                            } else if authManager.role == "ADMIN" {
+                                Text("⚡ QUẢN TRỊ VIÊN")
+                                    .font(.caption2.weight(.bold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.purple)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(6)
+                            } else {
+                                Text("⭐ THÀNH VIÊN FREE")
+                                    .font(.caption2.weight(.bold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(6)
+                            }
+
+                            Text("\(authManager.points) Điểm")
+                                .font(.caption2.weight(.bold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.green.opacity(0.15))
+                                .foregroundColor(.green)
+                                .cornerRadius(6)
+                        }
+                    }
+                    Spacer()
+                }
+
+                Divider()
+
+                // Bảng chi tiết trạng thái
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Hạn sử dụng:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(authManager.expireDate)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.primary)
+                    }
+
+                    HStack {
+                        Text("Phiên làm việc cục bộ:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("Còn \(authManager.getDaysUntilNextCheck()) ngày")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.green)
+                    }
+
+                    HStack {
+                        Text("Trạng thái bảo mật:")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("Đã mã hóa an toàn")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
                     }
                 }
             }
+            .padding(18)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
 
-            Section(header: Text("Thông tin ứng dụng")) {
-                HStack {
-                    Text("Logo Icon App")
+            // Thông báo lỗi nếu có
+            if let err = authManager.errorMessage, !err.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(err)
+                        .font(.footnote)
+                        .foregroundColor(.red)
                     Spacer()
-                    Text("logo.png")
-                        .foregroundColor(.secondary)
                 }
+                .padding(12)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(10)
+            }
 
-                HStack {
-                    Text("API Tra Cứu Bảo Hành")
+            // Thông báo thành công nếu có
+            if let succ = authManager.successMessage, !succ.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text(succ)
+                        .font(.footnote)
+                        .foregroundColor(.green)
                     Spacer()
-                    Text("DSS Việt Nam & Dahua Global")
-                        .foregroundColor(.secondary)
                 }
+                .padding(12)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(10)
+            }
 
-                HStack {
-                    Text("Hệ điều hành hỗ trợ")
+            // Nút đồng bộ / kiểm tra bản quyền trực tiếp từ Server
+            Button(action: {
+                authManager.checkStatus(silent: false)
+            }) {
+                HStack(spacing: 8) {
                     Spacer()
-                    Text("iOS 15.0+")
-                        .foregroundColor(.secondary)
+                    if authManager.isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.9)
+                        Text("ĐANG ĐỒNG BỘ...")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.white)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundColor(.white)
+                        Text("ĐỒNG BỘ & KIỂM TRA BẢN QUYỀN")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.white)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 14)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.orange, Color(hex: "f59e0b")]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+                .shadow(color: Color.orange.opacity(0.3), radius: 6, x: 0, y: 3)
+            }
+            .disabled(authManager.isLoading)
+
+            // Danh sách tính năng cao cấp đã kích hoạt
+            VStack(alignment: .leading, spacing: 12) {
+                Text("TIỆN ÍCH DAHUA & IMOU")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.secondary)
+
+                VStack(spacing: 8) {
+                    Button(action: {
+                        self.activeModalType = .changeIp
+                    }) {
+                        HStack {
+                            Image(systemName: "network")
+                                .foregroundColor(.orange)
+                                .frame(width: 24)
+                            Text("Đổi địa chỉ IP Camera")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.vertical, 6)
+                    }
+
+                    Divider()
+
+                    Button(action: {
+                        self.activeModalType = .changePass
+                    }) {
+                        HStack {
+                            Image(systemName: "key.fill")
+                                .foregroundColor(.orange)
+                                .frame(width: 24)
+                            Text("Đổi mật khẩu Camera")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.vertical, 6)
+                    }
+
+                    Divider()
+
+                    Button(action: {
+                        self.activeModalType = .rebootDevice
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                                .foregroundColor(.orange)
+                                .frame(width: 24)
+                            Text("Khởi động lại (Reboot) Camera")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.vertical, 6)
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+
+            // Nút Đăng Xuất Tài Khoản
+            Button(action: {
+                showLogoutAlert = true
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                    Text("Đăng Xuất Tài Khoản")
+                        .font(.subheadline.weight(.bold))
+                }
+                .foregroundColor(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.red.opacity(0.08))
+                .cornerRadius(10)
+            }
+            .alert(isPresented: $showLogoutAlert) {
+                Alert(
+                    title: Text("Đăng Xuất"),
+                    message: Text("Bạn có chắc chắn muốn đăng xuất tài khoản '\(authManager.username)' không?"),
+                    primaryButton: .destructive(Text("Đăng Xuất")) {
+                        authManager.logout()
+                    },
+                    secondaryButton: .cancel(Text("Hủy"))
+                )
+            }
+
+            // Hỗ trợ Zalo
+            Button(action: {
+                if let url = URL(string: "https://zalo.me/0909080119") {
+                    UIApplication.shared.open(url)
+                }
+            }) {
+                HStack {
+                    Spacer()
+                    Image(systemName: "phone.fill")
+                        .font(.caption)
+                    Text("Hotline / Zalo hỗ trợ: 0909.080.119")
+                        .font(.caption.weight(.bold))
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+                .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private func handleAuthAction() {
+        if authSelectedTab == 0 {
+            // Login
+            authManager.login(user: authUsername, pass: authPassword)
+        } else {
+            // Register
+            if authPassword != authConfirmPassword {
+                authManager.errorMessage = "Mật khẩu xác nhận không khớp!"
+                return
+            }
+            authManager.register(user: authUsername, pass: authPassword) { success, _ in
+                if success {
+                    self.authSelectedTab = 0
+                    self.authConfirmPassword = ""
                 }
             }
         }

@@ -20,16 +20,18 @@ jobs:
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "Using iOS SDK at: $SDK_PATH"
 
-          echo "=== Compiling with Swiftc ==="
+          echo "=== Compiling with Swiftc (Release Mode) ==="
           swiftc -target arm64-apple-ios15.0 \
                  -sdk "$SDK_PATH" \
                  -parse-as-library \
+                 -O \
                  -framework Foundation \
                  -framework SwiftUI \
                  -framework UIKit \
                  -framework AVFoundation \
                  -framework CoreImage \
                  -framework Network \
+                 -framework CryptoKit \
                  DahuaFreeDDNSiOS/*.swift \
                  -o DahuaFreeDDNS 2>&1 | tee compile.log
 
@@ -72,6 +74,17 @@ jobs:
           if [ -f "camera_logo.png" ]; then
             cp camera_logo.png Payload/DahuaFreeDDNS.app/
           fi
+
+          echo "=== Ad-Hoc / Release Codesign for TrollStore (No Developer Mode) ==="
+          if [ -f "entitlements.plist" ]; then
+            cp entitlements.plist Payload/DahuaFreeDDNS.app/entitlements.plist
+            codesign -s - -f --entitlements entitlements.plist Payload/DahuaFreeDDNS.app/DahuaFreeDDNS || true
+            codesign -s - -f --entitlements entitlements.plist Payload/DahuaFreeDDNS.app || true
+          fi
+          if command -v ldid &> /dev/null; then
+            ldid -Sentitlements.plist Payload/DahuaFreeDDNS.app/DahuaFreeDDNS || true
+          fi
+
           zip -r DahuaFreeDDNS-Real.ipa Payload
 
       - name: Upload Compiled IPA Artifact

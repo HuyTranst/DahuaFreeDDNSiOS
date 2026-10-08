@@ -46,7 +46,7 @@ def create_ipa():
         if item.endswith(".swift"):
             shutil.copyfile(os.path.join(src_dir, item), os.path.join(app_dir, item))
 
-    for icon_name in ["AppIcon.png", "AppIcon60x60@2x.png", "AppIcon60x60@3x.png", "AppIcon76x76@2x.png", "logo.png", "camera_logo.png"]:
+    for icon_name in ["AppIcon.png", "AppIcon60x60@2x.png", "AppIcon60x60@3x.png", "AppIcon76x76@2x.png", "logo.png", "camera_logo.png", "entitlements.plist"]:
         src_icon = os.path.join(src_dir, icon_name)
         if os.path.exists(src_icon):
             shutil.copyfile(src_icon, os.path.join(app_dir, icon_name))
