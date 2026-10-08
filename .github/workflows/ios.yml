@@ -38,13 +38,10 @@ jobs:
           SWIFTC_STATUS=${PIPESTATUS[0]}
           echo "Swiftc exit code: $SWIFTC_STATUS"
 
-          echo "### Swift Compilation Log" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat compile.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
           if [ $SWIFTC_STATUS -ne 0 ] || [ ! -f DahuaFreeDDNS ]; then
-            echo "::error::Compilation failed with code $SWIFTC_STATUS"
+            while IFS= read -r line; do
+              echo "::error::$line"
+            done < <(grep -E "error:|warning:" compile.log | head -n 30)
             exit 1
           fi
 
