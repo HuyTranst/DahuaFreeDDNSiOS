@@ -720,6 +720,7 @@ struct ContentView: View {
                     .default(Text("🌐 Đổi địa chỉ IP")) {
                         if let dev = activeDevice {
                             self.ip = dev.ip
+                            self.port = "\(dev.port)"
                             self.newIp = dev.ip
                             self.activeModalType = .changeIp
                         }
@@ -727,12 +728,14 @@ struct ContentView: View {
                     .default(Text("🔑 Đổi mật khẩu Camera")) {
                         if let dev = activeDevice {
                             self.ip = dev.ip
+                            self.port = "\(dev.port)"
                             self.activeModalType = .changePass
                         }
                     },
                     .default(Text("🔄 Khởi động lại (Reboot)")) {
                         if let dev = activeDevice {
                             self.ip = dev.ip
+                            self.port = "\(dev.port)"
                             self.activeModalType = .rebootDevice
                         }
                     },
@@ -2298,6 +2301,13 @@ struct ContentView: View {
                         .multilineTextAlignment(.trailing)
                 }
                 HStack {
+                    Text("HTTP Port")
+                    Spacer()
+                    TextField("80", text: $port)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+                HStack {
                     Text("Subnet Mask")
                     Spacer()
                     TextField("255.255.255.0", text: $subnetMask)
@@ -2355,6 +2365,21 @@ struct ContentView: View {
     var changePassView: some View {
         Form {
             Section(header: Text("Đổi Mật Khẩu Camera [\(ip)]")) {
+                HStack {
+                    Text("HTTP Port")
+                    Spacer()
+                    TextField("80", text: $port)
+                        .multilineTextAlignment(.trailing)
+                        .keyboardType(.numberPad)
+                }
+
+                HStack {
+                    Text("User Camera")
+                    Spacer()
+                    TextField("admin", text: $camUser)
+                        .multilineTextAlignment(.trailing)
+                }
+
                 HStack {
                     Text("MK hiện tại")
                     Spacer()
@@ -3909,35 +3934,79 @@ struct ContentView: View {
     }
 
     func executeChangeIp() {
-        setStatus("Đang gửi lệnh thay đổi IP...", type: .info)
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "80" : port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanNewIp = newIp.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanNewIp.isEmpty || cleanUser.isEmpty {
+            setStatus("Vui lòng nhập IP mới và tài khoản camera!", type: .error)
+            return
+        }
+        setStatus("Đang gửi lệnh đổi IP sang \(cleanNewIp)...", type: .info)
+
         cgiClient.changeCameraIp(
-            currentIp: ip,
-            newIp: newIp,
-            subnetMask: subnetMask,
-            gateway: gateway,
-            user: camUser,
+            currentIp: cleanIp,
+            port: cleanPort,
+            newIp: cleanNewIp,
+            subnetMask: subnetMask.trimmingCharacters(in: .whitespacesAndNewlines),
+            gateway: gateway.trimmingCharacters(in: .whitespacesAndNewlines),
+            user: cleanUser,
             pass: camPass
         ) { result in
             DispatchQueue.main.async {
-                if result.success {
-                    self.setStatus("Đã đổi IP thành công thành \(self.newIp)!", type: .success)
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
+                    self.setStatus("Đã đổi IP thành công sang \(cleanNewIp)! 🎉", type: .success)
+                    self.appendLog("Đã đổi IP từ \(cleanIp) sang \(cleanNewIp). Camera sẽ nhận IP mới!")
+                    self.ip = cleanNewIp
+                    self.activeModalType = nil
+                } else if result.success {
+                    self.setStatus("Phản hồi camera: \(result.rawText.trimmingCharacters(in: .whitespacesAndNewlines))", type: .success)
+                    self.ip = cleanNewIp
                     self.activeModalType = nil
                 } else {
-                    self.setStatus("Đổi IP thất bại! HTTP \(result.statusCode)", type: .error)
+                    let err = "Lỗi đổi IP: HTTP \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    self.setStatus(err, type: .error)
+                    self.appendLog(err)
                 }
             }
         }
     }
 
     func executeChangePass() {
-        if newPass.isEmpty || newPass != confirmPass {
-            setStatus("Mật khẩu mới không khớp!", type: .error)
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "80" : port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanUser.isEmpty {
+            setStatus("Vui lòng nhập tài khoản camera!", type: .error)
             return
         }
-        setStatus("Đang cập nhật mật khẩu mới...", type: .info)
-        DispatchQueue.main.async {
-            self.setStatus("Cập nhật mật khẩu mới thành công!", type: .success)
-            self.activeModalType = nil
+        if newPass.isEmpty || newPass != confirmPass {
+            setStatus("Mật khẩu mới không trùng khớp!", type: .error)
+            return
+        }
+        setStatus("Đang gửi lệnh đổi mật khẩu...", type: .info)
+
+        cgiClient.changePassword(
+            ip: cleanIp,
+            port: cleanPort,
+            user: cleanUser,
+            oldPass: oldPass,
+            newPass: newPass
+        ) { result in
+            DispatchQueue.main.async {
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
+                    self.setStatus("Đã đổi mật khẩu thành công! 🎉", type: .success)
+                    self.appendLog("Đã đổi mật khẩu camera [\(cleanIp)] thành công!")
+                    self.camPass = self.newPass
+                    self.activeModalType = nil
+                } else {
+                    let err = "Lỗi đổi mật khẩu: HTTP \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    self.setStatus(err, type: .error)
+                    self.appendLog(err)
+                }
+            }
         }
     }
 
@@ -4045,13 +4114,16 @@ struct ContentView: View {
             self.activeModalType = .setDdns
         case "changeIp":
             self.ip = dev.ip
+            self.port = "\(dev.port)"
             self.newIp = dev.ip
             self.activeModalType = .changeIp
         case "changePass":
             self.ip = dev.ip
+            self.port = "\(dev.port)"
             self.activeModalType = .changePass
         case "rebootDevice":
             self.ip = dev.ip
+            self.port = "\(dev.port)"
             self.activeModalType = .rebootDevice
         case "setDateNtp":
             self.ip = dev.ip

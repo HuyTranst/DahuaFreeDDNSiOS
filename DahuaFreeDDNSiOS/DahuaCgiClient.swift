@@ -52,13 +52,13 @@ class DahuaCgiClient {
         port: String,
         user: String,
         pass: String,
-        channelIdx: String,
+        channelIdx: String = "0",
         enable: Bool,
         serverAddr: String,
         domain: String,
         ddnsUser: String,
         ddnsPass: String,
-        existingKeysText: String,
+        existingKeysText: String = "",
         completion: @escaping (CgiResult) -> Void
     ) {
         let enStr = enable ? "true" : "false"
@@ -67,13 +67,17 @@ class DahuaCgiClient {
         let encUser = ddnsUser.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ddnsUser
         let encPass = ddnsPass.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ddnsPass
 
+        // Dahua CGI standard uses Address and HostName, plus dynamic UserName/User and Password/Pass
+        let userKey = existingKeysText.contains("table.DDNS[\(channelIdx)].UserName") ? "UserName" : "User"
+        let passKey = existingKeysText.contains("table.DDNS[\(channelIdx)].Password") ? "Password" : "Pass"
+
         let idx = channelIdx
         let urlString = "http://\(ip):\(port)/cgi-bin/configManager.cgi?action=setConfig" +
             "&DDNS[\(idx)].Enable=\(enStr)" +
-            "&DDNS[\(idx)].ServerAddress=\(encServer)" +
-            "&DDNS[\(idx)].DomainName=\(encDomain)" +
-            "&DDNS[\(idx)].Username=\(encUser)" +
-            "&DDNS[\(idx)].Password=\(encPass)"
+            "&DDNS[\(idx)].Address=\(encServer)" +
+            "&DDNS[\(idx)].HostName=\(encDomain)" +
+            "&DDNS[\(idx)].\(userKey)=\(encUser)" +
+            "&DDNS[\(idx)].\(passKey)=\(encPass)"
 
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
     }
@@ -89,7 +93,7 @@ class DahuaCgiClient {
         domain: String,
         ddnsUser: String,
         ddnsPass: String,
-        existingKeysText: String,
+        existingKeysText: String = "",
         completion: @escaping (CgiResult) -> Void
     ) {
         saveDahuaDDNSConfig(
@@ -110,6 +114,7 @@ class DahuaCgiClient {
 
     func changeCameraIp(
         currentIp: String,
+        port: String = "80",
         newIp: String,
         subnetMask: String,
         gateway: String,
@@ -117,12 +122,36 @@ class DahuaCgiClient {
         pass: String,
         completion: @escaping (CgiResult) -> Void
     ) {
-        let urlString = "http://\(currentIp):80/cgi-bin/configManager.cgi?action=setConfig" +
+        let camPort = port.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "80" : port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let urlString = "http://\(currentIp):\(camPort)/cgi-bin/configManager.cgi?action=setConfig" +
             "&Network.eth0.IPAddress=\(newIp)" +
             "&Network.eth0.SubnetMask=\(subnetMask)" +
-            "&Network.eth0.DefaultGateway=\(gateway)"
+            "&Network.eth0.Gateway=\(gateway)" +
+            "&Network.eth0.DhcpEnable=false"
 
         executeWithAuth(urlString: urlString, user: user, pass: pass, completion: completion)
+    }
+
+    func changeIp(
+        ip: String,
+        port: String = "80",
+        user: String,
+        pass: String,
+        newIp: String,
+        subnet: String = "255.255.255.0",
+        gateway: String = "192.168.1.1",
+        completion: @escaping (CgiResult) -> Void
+    ) {
+        changeCameraIp(
+            currentIp: ip,
+            port: port,
+            newIp: newIp,
+            subnetMask: subnet,
+            gateway: gateway,
+            user: user,
+            pass: pass,
+            completion: completion
+        )
     }
 
     // MARK: - Reboot Device
