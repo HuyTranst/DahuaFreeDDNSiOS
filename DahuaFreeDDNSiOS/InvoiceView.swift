@@ -30,6 +30,9 @@ struct InvoiceView: View {
     @State private var invoiceItems: [InvoiceItem] = []
     @State private var invoiceNotes: String = "Tặng Hộp Chống nước"
 
+    // Aspect ratio selection for preview & export
+    @State private var previewRatio: InvoiceAspectRatio = .ratio9_16
+
     // Modals
     @State private var showCompanySetup: Bool = false
     @State private var showProductLibrary: Bool = false
@@ -94,6 +97,7 @@ struct InvoiceView: View {
             InvoicePreviewModalView(
                 invoice: buildCurrentInvoiceRecord(),
                 company: invoiceMgr.companyInfo,
+                selectedRatio: $previewRatio,
                 onExportJpg: {
                     exportInvoiceToJpg()
                 }
@@ -312,40 +316,72 @@ struct InvoiceView: View {
             // Quick Load Product from Local Library
             if !invoiceMgr.savedProducts.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
+                    HStack(spacing: 6) {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.orange)
                         Text("CHỌN NHANH TỪ KHO CCTV")
                             .font(.caption.weight(.bold))
                             .foregroundColor(.secondary)
                         Spacer()
+                        if !productSearchText.isEmpty {
+                            Button(action: { productSearchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                                    .font(.caption)
+                            }
+                        }
                     }
 
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(invoiceMgr.savedProducts) { preset in
-                                Button(action: { selectPresetProduct(preset) }) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(preset.model)
-                                            .font(.caption2.weight(.bold))
-                                            .foregroundColor(.primary)
-                                            .lineLimit(1)
-                                        Text(preset.name)
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                        Text(formatVndCurrency(preset.price))
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundColor(.orange)
+                    // Khung text nhập sản phẩm cần tìm kiếm
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                        TextField("Nhập tên sản phẩm hoặc model cần tìm...", text: $productSearchText)
+                            .font(.subheadline)
+                    }
+                    .padding(8)
+                    .background(Color.gray.opacity(0.08))
+                    .cornerRadius(8)
+
+                    let filteredPresets = invoiceMgr.savedProducts.filter { preset in
+                        if productSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+                        let q = productSearchText.lowercased()
+                        return preset.name.lowercased().contains(q) || preset.model.lowercased().contains(q)
+                    }
+
+                    if filteredPresets.isEmpty {
+                        Text("Không tìm thấy sản phẩm phù hợp")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 6)
+                    } else {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(filteredPresets) { preset in
+                                    Button(action: { selectPresetProduct(preset) }) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(preset.model)
+                                                .font(.caption2.weight(.bold))
+                                                .foregroundColor(.primary)
+                                                .lineLimit(1)
+                                            Text(preset.name)
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                            Text(formatVndCurrency(preset.price))
+                                                .font(.caption2.weight(.semibold))
+                                                .foregroundColor(.orange)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(Color.gray.opacity(0.08))
+                                        .cornerRadius(8)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+                                        )
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(Color.gray.opacity(0.08))
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.orange.opacity(0.2), lineWidth: 1)
-                                    )
                                 }
                             }
                         }
@@ -385,13 +421,36 @@ struct InvoiceView: View {
                         .background(Color.gray.opacity(0.08))
                         .cornerRadius(6)
 
-                    HStack {
+                    HStack(spacing: 4) {
                         Text("SL:")
-                            .font(.caption)
+                            .font(.caption2.weight(.bold))
                             .foregroundColor(.secondary)
-                        Stepper("\(inputQuantity)", value: $inputQuantity, in: 1...999)
+
+                        Button(action: { if inputQuantity > 1 { inputQuantity -= 1 } }) {
+                            Text("-")
+                                .font(.system(size: 15, weight: .bold))
+                                .frame(width: 26, height: 26)
+                                .background(Color.gray.opacity(0.18))
+                                .foregroundColor(.primary)
+                                .cornerRadius(5)
+                        }
+
+                        Text("\(inputQuantity)")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(.orange)
+                            .frame(minWidth: 26, alignment: .center)
+
+                        Button(action: { inputQuantity += 1 }) {
+                            Text("+")
+                                .font(.system(size: 15, weight: .bold))
+                                .frame(width: 26, height: 26)
+                                .background(Color.orange)
+                                .foregroundColor(.white)
+                                .cornerRadius(5)
+                        }
                     }
-                    .padding(4)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
                     .background(Color.gray.opacity(0.08))
                     .cornerRadius(6)
 
@@ -660,13 +719,12 @@ struct InvoiceView: View {
 
     private func exportInvoiceToJpg() {
         let invoice = buildCurrentInvoiceRecord()
-        let paper = InvoicePaperView(invoice: invoice, company: invoiceMgr.companyInfo)
+        let paper = InvoicePaperView(invoice: invoice, company: invoiceMgr.companyInfo, aspectRatio: previewRatio)
 
-        // Calculate height dynamically based on items count
-        let baseHeight: CGFloat = 380 + CGFloat(invoice.items.count * 34)
-        let totalHeight = max(baseHeight, 720)
+        let targetWidth = previewRatio.paperWidth
+        let targetHeight = previewRatio.paperHeight(itemsCount: invoice.items.count)
 
-        if let img = paper.renderAsImage(targetSize: CGSize(width: 595, height: totalHeight)) {
+        if let img = paper.renderAsImage(targetSize: CGSize(width: targetWidth, height: targetHeight)) {
             self.exportedImage = img
             self.showPreviewModal = false
             self.showShareSheet = true
@@ -686,7 +744,6 @@ struct CompanySetupModalView: View {
     @State private var address: String = ""
     @State private var phone: String = ""
     @State private var email: String = ""
-    @State private var bank: String = ""
 
     var body: some View {
         NavigationView {
@@ -698,13 +755,13 @@ struct CompanySetupModalView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Địa chỉ:").font(.caption).foregroundColor(.secondary)
+                        Text("Địa chỉ (có thể để trống):").font(.caption).foregroundColor(.secondary)
                         TextField("Địa chỉ", text: $address)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Số điện thoại / Hotline:").font(.caption).foregroundColor(.secondary)
-                        TextField("Điện thoại", text: $phone)
+                        Text("HotLine/Zalo:").font(.caption).foregroundColor(.secondary)
+                        TextField("Điện thoại / Zalo", text: $phone)
                             .keyboardType(.phonePad)
                     }
 
@@ -712,11 +769,6 @@ struct CompanySetupModalView: View {
                         Text("Email liên hệ:").font(.caption).foregroundColor(.secondary)
                         TextField("Email", text: $email)
                             .keyboardType(.emailAddress)
-                    }
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Tài khoản ngân hàng:").font(.caption).foregroundColor(.secondary)
-                        TextField("Thông tin STK", text: $bank)
                     }
                 }
             }
@@ -732,7 +784,7 @@ struct CompanySetupModalView: View {
                         company.address = address
                         company.phone = phone
                         company.email = email
-                        company.bankAccount = bank
+                        company.bankAccount = ""
                         presentationMode.wrappedValue.dismiss()
                     }) {
                         Text("Lưu")
@@ -742,11 +794,10 @@ struct CompanySetupModalView: View {
                 }
             }
             .onAppear {
-                name = company.name
+                name = company.name.isEmpty ? "CÔNG TY GIẢI PHÁP CÔNG NGHỆ QUỐC HUY" : company.name
                 address = company.address
-                phone = company.phone
-                email = company.email
-                bank = company.bankAccount
+                phone = company.phone.isEmpty ? "0909080119" : company.phone
+                email = company.email.isEmpty ? "Dahua.tuanhuy@gmail.com" : company.email
             }
         }
     }
@@ -874,11 +925,13 @@ struct ProductLibraryModalView: View {
     }
 }
 
-// MARK: - Saved Invoices Modal View
+// MARK: - Saved Invoices Modal View (Hóa Đơn Đã Lưu có Tìm Kiếm Tên, SĐT)
 struct SavedInvoicesModalView: View {
     @ObservedObject var invoiceMgr: InvoiceManager
     let onLoadInvoice: (InvoiceRecord) -> Void
     @Environment(\.presentationMode) var presentationMode
+
+    @State private var searchText: String = ""
 
     private let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -886,49 +939,95 @@ struct SavedInvoicesModalView: View {
         return df
     }()
 
+    var filteredInvoices: [InvoiceRecord] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if query.isEmpty {
+            return invoiceMgr.savedInvoices
+        }
+        return invoiceMgr.savedInvoices.filter { inv in
+            inv.customerName.lowercased().contains(query) ||
+            inv.customerPhone.lowercased().contains(query) ||
+            inv.invoiceNo.lowercased().contains(query)
+        }
+    }
+
     var body: some View {
         NavigationView {
-            List {
-                if invoiceMgr.savedInvoices.isEmpty {
-                    Text("Chưa có hóa đơn nào được lưu.")
-                        .foregroundColor(.secondary)
-                        .padding(.vertical, 20)
-                } else {
-                    ForEach(invoiceMgr.savedInvoices) { inv in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(inv.invoiceNo)
-                                    .font(.system(.subheadline, design: .monospaced).weight(.bold))
-                                    .foregroundColor(.orange)
-                                Spacer()
-                                Text(formatVndCurrency(inv.totalAmount))
-                                    .font(.headline.weight(.heavy))
-                                    .foregroundColor(.primary)
-                            }
+            VStack(spacing: 0) {
+                // Search bar
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                    TextField("Tìm kiếm theo tên khách, SĐT, số HĐ...", text: $searchText)
+                        .font(.subheadline)
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                                .font(.caption)
+                        }
+                    }
+                }
+                .padding(10)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
 
-                            HStack {
-                                Text("Khách hàng: \(inv.customerName.isEmpty ? "Khách lẻ" : inv.customerName)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Text(dateFormatter.string(from: inv.createdAt))
+                List {
+                    if invoiceMgr.savedInvoices.isEmpty {
+                        Text("Chưa có hóa đơn nào được lưu.")
+                            .foregroundColor(.secondary)
+                            .padding(.vertical, 20)
+                    } else if filteredInvoices.isEmpty {
+                        Text("Không tìm thấy hóa đơn nào phù hợp với: \"\(searchText)\"")
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                            .padding(.vertical, 20)
+                    } else {
+                        ForEach(filteredInvoices) { inv in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(inv.invoiceNo)
+                                        .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                                        .foregroundColor(.orange)
+                                    Spacer()
+                                    Text(formatVndCurrency(inv.totalAmount))
+                                        .font(.headline.weight(.heavy))
+                                        .foregroundColor(.primary)
+                                }
+
+                                HStack {
+                                    Text("Khách hàng: \(inv.customerName.isEmpty ? "Khách lẻ" : inv.customerName)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text(dateFormatter.string(from: inv.createdAt))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Text("\(inv.items.count) sản phẩm | \(inv.customerPhone.isEmpty ? "Không có SĐT" : inv.customerPhone)")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
-
-                            Text("\(inv.items.count) sản phẩm | \(inv.customerPhone)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                onLoadInvoice(inv)
+                            }
                         }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            onLoadInvoice(inv)
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                let itemToDelete = filteredInvoices[index]
+                                if let actualIdx = invoiceMgr.savedInvoices.firstIndex(where: { $0.id == itemToDelete.id }) {
+                                    invoiceMgr.deleteInvoice(at: IndexSet(integer: actualIdx))
+                                }
+                            }
                         }
                     }
-                    .onDelete(perform: invoiceMgr.deleteInvoice)
                 }
+                .listStyle(PlainListStyle())
             }
-            .listStyle(PlainListStyle())
             .navigationTitle("Hóa Đơn Đã Lưu")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -940,48 +1039,118 @@ struct SavedInvoicesModalView: View {
     }
 }
 
-// MARK: - Invoice Preview Modal View (Xem Trước Hóa Đơn Khổ A4)
+// MARK: - Invoice Preview Modal View (Xem Trước Hóa Đơn Tùy Chọn Khổ 9:16 & 6:19)
 struct InvoicePreviewModalView: View {
     let invoice: InvoiceRecord
     let company: CompanyInfo
+    @Binding var selectedRatio: InvoiceAspectRatio
     let onExportJpg: () -> Void
     @Environment(\.presentationMode) var presentationMode
 
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
+                // Selector Toolbar: Khổ 9:16 & 6:19 kèm hình chữ nhật minh họa
+                HStack(spacing: 12) {
+                    Text("Tùy chọn khổ:")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    // Option 1: 9:16
+                    Button(action: {
+                        withAnimation { selectedRatio = .ratio9_16 }
+                    }) {
+                        HStack(spacing: 5) {
+                            // Hình chữ nhật minh họa tỷ lệ 9:16
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .stroke(selectedRatio == .ratio9_16 ? Color.orange : Color.gray, lineWidth: 1.5)
+                                    .frame(width: 13, height: 23)
+                                if selectedRatio == .ratio9_16 {
+                                    RoundedRectangle(cornerRadius: 1)
+                                        .fill(Color.orange.opacity(0.35))
+                                        .frame(width: 9, height: 19)
+                                }
+                            }
+
+                            Text("9:16")
+                                .font(.caption.weight(selectedRatio == .ratio9_16 ? .bold : .medium))
+                                .foregroundColor(selectedRatio == .ratio9_16 ? .orange : .primary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(selectedRatio == .ratio9_16 ? Color.orange.opacity(0.12) : Color.gray.opacity(0.08))
+                        .cornerRadius(8)
+                    }
+
+                    // Option 2: 6:19
+                    Button(action: {
+                        withAnimation { selectedRatio = .ratio6_19 }
+                    }) {
+                        HStack(spacing: 5) {
+                            // Hình chữ nhật minh họa tỷ lệ 6:19 (dài hơn)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .stroke(selectedRatio == .ratio6_19 ? Color.orange : Color.gray, lineWidth: 1.5)
+                                    .frame(width: 9, height: 26)
+                                if selectedRatio == .ratio6_19 {
+                                    RoundedRectangle(cornerRadius: 1)
+                                        .fill(Color.orange.opacity(0.35))
+                                        .frame(width: 6, height: 22)
+                                }
+                            }
+
+                            Text("6:19")
+                                .font(.caption.weight(selectedRatio == .ratio6_19 ? .bold : .medium))
+                                .foregroundColor(selectedRatio == .ratio6_19 ? .orange : .primary)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(selectedRatio == .ratio6_19 ? Color.orange.opacity(0.12) : Color.gray.opacity(0.08))
+                        .cornerRadius(8)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.white)
+                .shadow(color: Color.black.opacity(0.03), radius: 2, y: 1)
+
+                // Scroll Preview Paper
                 ScrollView([.horizontal, .vertical]) {
-                    InvoicePaperView(invoice: invoice, company: company)
+                    InvoicePaperView(invoice: invoice, company: company, aspectRatio: selectedRatio)
                         .padding(16)
                 }
                 .background(Color.gray.opacity(0.2))
 
-                // Bottom bar
+                // Bottom Action Bar
                 HStack(spacing: 12) {
                     Button(action: { presentationMode.wrappedValue.dismiss() }) {
                         Text("Chỉnh sửa lại")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .padding(.vertical, 10)
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 14)
                             .background(Color.gray.opacity(0.1))
                             .cornerRadius(8)
                     }
 
                     Button(action: onExportJpg) {
-                        HStack {
+                        HStack(spacing: 6) {
                             Image(systemName: "photo.badge.arrow.down.fill")
-                            Text("XUẤT ẢNH JPG GỬI KHÁCH")
+                            Text("XUẤT ẢNH \(selectedRatio.rawValue) GỬI KHÁCH")
                                 .font(.body.weight(.bold))
                         }
                         .foregroundColor(.white)
                         .padding(.vertical, 10)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, 16)
                         .background(Color.orange)
                         .cornerRadius(8)
                     }
                 }
                 .padding(.vertical, 10)
+                .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity)
                 .background(Color.white)
             }

@@ -36,11 +36,11 @@ struct PresetProduct: Identifiable, Codable, Equatable {
 }
 
 struct CompanyInfo: Codable, Equatable {
-    var name: String = "CÔNG TY TNHH GIẢI PHÁP CCTV VIỆT NAM"
-    var address: String = "36 Hàm Nghi, Phường Bến Nghé, Quận 1, TP. Hồ Chí Minh"
-    var phone: String = "0909.080.119"
-    var email: String = "support@cctvapp.net"
-    var bankAccount: String = "MB Bank - STK: 0909080119"
+    var name: String = "CÔNG TY GIẢI PHÁP CÔNG NGHỆ QUỐC HUY"
+    var address: String = ""
+    var phone: String = "0909080119"
+    var email: String = "Dahua.tuanhuy@gmail.com"
+    var bankAccount: String = ""
 }
 
 struct InvoiceRecord: Identifiable, Codable, Equatable {
@@ -91,10 +91,12 @@ class InvoiceManager: ObservableObject {
     init() {
         // Load company info
         if let data = UserDefaults.standard.data(forKey: companyKey),
-           let decoded = try? JSONDecoder().decode(CompanyInfo.self, from: data) {
+           let decoded = try? JSONDecoder().decode(CompanyInfo.self, from: data),
+           decoded.name != "CÔNG TY TNHH GIẢI PHÁP CCTV VIỆT NAM" {
             self.companyInfo = decoded
         } else {
             self.companyInfo = CompanyInfo()
+            saveCompanyInfo()
         }
 
         // Load products
