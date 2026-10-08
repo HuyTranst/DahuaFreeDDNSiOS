@@ -144,7 +144,8 @@ struct InvoicePaperView: View {
 
             // Table Rows
             VStack(spacing: 0) {
-                ForEach(Array(invoice.items.enumerated()), id: \.element.id) { index, item in
+                ForEach(0..<invoice.items.count, id: \.self) { index in
+                    let item = invoice.items[index]
                     HStack(spacing: 0) {
                         Text("\(index + 1)")
                             .frame(width: 32, alignment: .center)

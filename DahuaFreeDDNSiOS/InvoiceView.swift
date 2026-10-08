@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // MARK: - Main Invoice Creation & Management View (Hóa Đơn Bán Hàng)
 struct InvoiceView: View {
@@ -437,7 +438,8 @@ struct InvoiceView: View {
                         .padding(.vertical, 16)
                         .frame(maxWidth: .infinity, alignment: .center)
                 } else {
-                    ForEach(Array(invoiceItems.enumerated()), id: \.element.id) { idx, item in
+                    ForEach(0..<invoiceItems.count, id: \.self) { idx in
+                        let item = invoiceItems[idx]
                         VStack(spacing: 6) {
                             HStack {
                                 Text("\(idx + 1).")
