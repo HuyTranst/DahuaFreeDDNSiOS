@@ -14,8 +14,9 @@ struct InvoiceView: View {
     @State private var customerPhone: String = ""
     @State private var customerAddress: String = ""
     @State private var invoiceDate: Date = Date()
-    @State private var warrantyMonths: Int = 12
+    @State private var warrantyMonths: Int = 24
     @State private var invoiceNo: String = ""
+    @State private var currentEditingId: UUID? = nil
 
     // Step 2: Add Product
     @State private var productSearchText: String = ""
@@ -28,7 +29,7 @@ struct InvoiceView: View {
 
     // Invoice items & notes
     @State private var invoiceItems: [InvoiceItem] = []
-    @State private var invoiceNotes: String = "Tặng Hộp Chống nước"
+    @State private var invoiceNotes: String = "Tặng hộp chống nước, Tặng dây điện 2m theo cam, bảo hành 2 năm"
 
     // Aspect ratio selection for preview & export
     @State private var previewRatio: InvoiceAspectRatio = .ratio9_16
@@ -633,11 +634,13 @@ struct InvoiceView: View {
 
     private func resetForm() {
         generateNewInvoiceNo()
+        currentEditingId = nil
         customerName = ""
         customerPhone = ""
         customerAddress = ""
         invoiceItems.removeAll()
-        invoiceNotes = "Tặng Hộp Chống nước"
+        warrantyMonths = 24
+        invoiceNotes = "Tặng hộp chống nước, Tặng dây điện 2m theo cam, bảo hành 2 năm"
         currentStep = 1
     }
 
@@ -687,7 +690,7 @@ struct InvoiceView: View {
     }
 
     private func buildCurrentInvoiceRecord() -> InvoiceRecord {
-        InvoiceRecord(
+        var rec = InvoiceRecord(
             invoiceNo: invoiceNo,
             date: invoiceDate,
             warrantyMonths: warrantyMonths,
@@ -697,14 +700,20 @@ struct InvoiceView: View {
             items: invoiceItems,
             notes: invoiceNotes
         )
+        if let editId = currentEditingId {
+            rec.id = editId
+        }
+        return rec
     }
 
     private func saveCurrentInvoice() {
         let record = buildCurrentInvoiceRecord()
+        currentEditingId = record.id
         invoiceMgr.addInvoice(record)
     }
 
     private func loadExistingInvoice(_ record: InvoiceRecord) {
+        currentEditingId = record.id
         invoiceNo = record.invoiceNo
         invoiceDate = record.date
         warrantyMonths = record.warrantyMonths
@@ -1025,19 +1034,7 @@ struct SavedInvoicesModalView: View {
                                     onLoadInvoice(inv)
                                 }
 
-                                // Nút Xóa trực quan bên phải
-                                Button(action: {
-                                    if let actualIdx = invoiceMgr.savedInvoices.firstIndex(where: { $0.id == inv.id }) {
-                                        invoiceMgr.deleteInvoice(at: IndexSet(integer: actualIdx))
-                                    }
-                                }) {
-                                    Image(systemName: "trash")
-                                        .foregroundColor(.red)
-                                        .padding(8)
-                                        .background(Color.red.opacity(0.1))
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(BorderlessButtonStyle())
+
                             }
                         }
                         .onDelete { indexSet in

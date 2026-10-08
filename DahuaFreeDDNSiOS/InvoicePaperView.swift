@@ -55,41 +55,38 @@ enum InvoiceAspectRatio: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Photo Library Saver Helper
+// MARK: - Photo Library Saver Helper (Sử dụng UIImageWriteToSavedPhotosAlbum an toàn tuyệt đối, không crash)
 class PhotoLibrarySaver: NSObject {
     static let shared = PhotoLibrarySaver()
+    private var completionHandler: ((Bool, String?) -> Void)?
 
     func saveImageToAlbum(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
-        let authStatus = PHPhotoLibrary.authorizationStatus()
-        if authStatus == .authorized || authStatus == .limited {
-            performSave(image, completion: completion)
-        } else if authStatus == .notDetermined {
-            PHPhotoLibrary.requestAuthorization { newStatus in
-                DispatchQueue.main.async {
-                    if newStatus == .authorized || newStatus == .limited {
-                        self.performSave(image, completion: completion)
-                    } else {
-                        completion(false, "Vui lòng cấp quyền truy cập Ảnh trong Cài đặt của iPhone để lưu hóa đơn vào Bộ sưu tập.")
-                    }
-                }
-            }
-        } else {
-            completion(false, "Ứng dụng chưa được cấp quyền lưu ảnh. Vui lòng vào Cài đặt > Quyền riêng tư > Ảnh để cho phép.")
+        self.completionHandler = completion
+
+        // Kiểm tra quyền Photo Library trước khi ghi
+        let status = PHPhotoLibrary.authorizationStatus()
+        if status == .restricted || status == .denied {
+            completion(false, "Vui lòng vào Cài đặt > Quyền riêng tư > Ảnh để cấp quyền lưu ảnh.")
+            return
         }
+
+        // Gọi UIKit API lưu ảnh vào Camera Roll với selector callback
+        UIImageWriteToSavedPhotosAlbum(
+            image,
+            self,
+            #selector(image(_:didFinishSavingWithError:contextInfo:)),
+            nil
+        )
     }
 
-    private func performSave(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
-        PHPhotoLibrary.shared().performChanges({
-            PHAssetChangeRequest.creationRequestForAsset(from: image)
-        }) { success, error in
-            DispatchQueue.main.async {
-                if success {
-                    completion(true, nil)
-                } else {
-                    let errMsg = error?.localizedDescription ?? "Không rõ lỗi khi lưu vào Album Ảnh."
-                    completion(false, errMsg)
-                }
+    @objc private func image(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer?) {
+        DispatchQueue.main.async { [weak self] in
+            if let error = error {
+                self?.completionHandler?(false, error.localizedDescription)
+            } else {
+                self?.completionHandler?(true, nil)
             }
+            self?.completionHandler = nil
         }
     }
 }
@@ -423,7 +420,7 @@ struct InvoicePaperView: View {
     }
 }
 
-// MARK: - JPG Image Generator from View
+// MARK: - JPG Image Generator from View (Layout an toàn và scale 2.0 tối ưu bộ nhớ)
 extension View {
     func renderAsImage(targetSize: CGSize = CGSize(width: 390, height: 693.3)) -> UIImage? {
         let controller = UIHostingController(rootView: self.edgesIgnoringSafeArea(.all))
@@ -431,10 +428,12 @@ extension View {
 
         view.bounds = CGRect(origin: .zero, size: targetSize)
         view.backgroundColor = .white
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
 
-        // Use 3.0 scale for sharp Retina rendering on smartphones
         let format = UIGraphicsImageRendererFormat()
-        format.scale = 3.0
+        format.scale = 2.0
+        format.opaque = true
 
         let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
         return renderer.image { ctx in

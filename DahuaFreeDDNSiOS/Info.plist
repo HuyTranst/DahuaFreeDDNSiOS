@@ -26,6 +26,8 @@
 	<string>Ứng dụng cần quyền truy cập mạng cục bộ để quét và tìm kiếm camera Dahua &amp; Imou trong mạng LAN Wi-Fi.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Ứng dụng cần quyền lưu ảnh để lưu hóa đơn bán hàng camera trực tiếp vào Album Bộ sưu tập ảnh của bạn.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ứng dụng cần quyền truy cập Album ảnh để lưu hóa đơn bán hàng camera vào Bộ sưu tập.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_dahua._udp</string>

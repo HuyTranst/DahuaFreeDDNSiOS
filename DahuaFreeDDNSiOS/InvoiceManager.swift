@@ -152,7 +152,8 @@ class InvoiceManager: ObservableObject {
     }
 
     func addInvoice(_ invoice: InvoiceRecord) {
-        if let idx = savedInvoices.firstIndex(where: { $0.id == invoice.id }) {
+        // Không lưu trùng hóa đơn: kiểm tra theo ID hoặc Mã số hóa đơn (invoiceNo)
+        if let idx = savedInvoices.firstIndex(where: { $0.id == invoice.id || $0.invoiceNo == invoice.invoiceNo }) {
             savedInvoices[idx] = invoice
         } else {
             savedInvoices.insert(invoice, at: 0)
