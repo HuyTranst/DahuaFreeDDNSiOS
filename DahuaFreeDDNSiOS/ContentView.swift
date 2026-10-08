@@ -474,9 +474,6 @@ struct ContentView: View {
     @State private var logHistory: String = "Ứng dụng Dahua & Imou Manager iOS đã sẵn sàng.\n"
     @State private var rawFetchedConfig: String = ""
 
-    // Banner Animation State
-    @State private var isBannerAnimated: Bool = false
-
     private let cgiClient = DahuaCgiClient()
     private let warrantyClient = DahuaWarrantyClient()
 
@@ -1106,53 +1103,17 @@ struct ContentView: View {
     var trangChuView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Compact Home Banner (~50% height reduction) with sleek horizontal shimmer
+                // Compact Home Banner (~50% height reduction)
                 ZStack {
-                    // Fixed warm orange-gold gradient background (No bouncing/moving)
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.orange,
-                            Color(red: 1.0, green: 0.62, blue: 0.05),
-                            Color(red: 0.95, green: 0.48, blue: 0.05)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .cornerRadius(12)
-
-                    // Subtle horizontal shimmer beam running across smoothly
-                    GeometryReader { geo in
-                        Rectangle()
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color.white.opacity(0.0),
-                                        Color.white.opacity(0.20),
-                                        Color.white.opacity(0.0)
-                                    ]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: 50)
-                            .rotationEffect(.degrees(20))
-                            .offset(x: isBannerAnimated ? geo.size.width + 60 : -70)
-                    }
-                    .clipped()
-                    .cornerRadius(12)
+                    LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.9), Color.orange]), startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .cornerRadius(12)
 
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 5) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(.yellow)
-
-                                Text("Công cụ hổ trợ Dahua & Imou")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .lineLimit(1)
-                            }
+                            Text("Công cụ hổ trợ Dahua & Imou")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
 
                             Button(action: {
                                 if let url = URL(string: "https://zalo.me/0909080119") {
@@ -1171,12 +1132,10 @@ struct ContentView: View {
                                 .background(Color.white)
                                 .foregroundColor(.orange)
                                 .cornerRadius(12)
-                                .shadow(color: Color.black.opacity(0.06), radius: 2, y: 1)
                             }
                         }
                         Spacer()
 
-                        // Stable Logo (Fixed position, crisp appearance)
                         CameraLogoIcon(brand: .imou)
                             .frame(width: 44, height: 44)
                             .background(Color.white)
@@ -1394,11 +1353,6 @@ struct ContentView: View {
                 }
             }
             .padding(.vertical)
-        }
-        .onAppear {
-            withAnimation(Animation.linear(duration: 3.5).repeatForever(autoreverses: false)) {
-                isBannerAnimated = true
-            }
         }
     }
 
