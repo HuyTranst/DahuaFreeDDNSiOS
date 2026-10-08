@@ -64,7 +64,7 @@ struct InvoiceView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .background(Color(UIColor.systemGroupedBackground).edgesIgnoringSafeArea(.all))
+        .background(Color.gray.opacity(0.05).edgesIgnoringSafeArea(.all))
         .onAppear {
             if invoiceNo.isEmpty {
                 generateNewInvoiceNo()
@@ -233,7 +233,7 @@ struct InvoiceView: View {
                     }
                 }
                 .padding(10)
-                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .background(Color.gray.opacity(0.08))
                 .cornerRadius(8)
 
                 // Input fields
@@ -243,7 +243,7 @@ struct InvoiceView: View {
                         TextField("Tên khách hàng *", text: $customerName)
                     }
                     .padding(10)
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color.gray.opacity(0.08))
                     .cornerRadius(8)
 
                     HStack {
@@ -252,7 +252,7 @@ struct InvoiceView: View {
                             .keyboardType(.phonePad)
                     }
                     .padding(10)
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color.gray.opacity(0.08))
                     .cornerRadius(8)
 
                     HStack {
@@ -260,7 +260,7 @@ struct InvoiceView: View {
                         TextField("Địa chỉ lắp đặt", text: $customerAddress)
                     }
                     .padding(10)
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color.gray.opacity(0.08))
                     .cornerRadius(8)
 
                     HStack {
@@ -272,7 +272,7 @@ struct InvoiceView: View {
                             .font(.subheadline.weight(.semibold))
                     }
                     .padding(10)
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color.gray.opacity(0.08))
                     .cornerRadius(8)
                 }
             }
@@ -339,7 +339,7 @@ struct InvoiceView: View {
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
-                                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                                    .background(Color.gray.opacity(0.08))
                                     .cornerRadius(8)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 8)
@@ -368,12 +368,12 @@ struct InvoiceView: View {
                 HStack(spacing: 10) {
                     TextField("Model (VD: DH-IPC-HDW1230T)", text: $inputModel)
                         .padding(8)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.gray.opacity(0.08))
                         .cornerRadius(6)
 
                     TextField("Tên sản phẩm *", text: $inputName)
                         .padding(8)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.gray.opacity(0.08))
                         .cornerRadius(6)
                 }
 
@@ -381,7 +381,7 @@ struct InvoiceView: View {
                     TextField("ĐVT", text: $inputUnit)
                         .frame(width: 60)
                         .padding(8)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.gray.opacity(0.08))
                         .cornerRadius(6)
 
                     HStack {
@@ -391,13 +391,13 @@ struct InvoiceView: View {
                         Stepper("\(inputQuantity)", value: $inputQuantity, in: 1...999)
                     }
                     .padding(4)
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color.gray.opacity(0.08))
                     .cornerRadius(6)
 
                     TextField("Đơn giá (VD: 1.710.000)", text: $inputPriceText)
                         .keyboardType(.numbersAndPunctuation)
                         .padding(8)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.gray.opacity(0.08))
                         .cornerRadius(6)
                 }
 
@@ -477,7 +477,7 @@ struct InvoiceView: View {
                             }
                         }
                         .padding(10)
-                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .background(Color.gray.opacity(0.08))
                         .cornerRadius(8)
                     }
                 }
@@ -496,7 +496,7 @@ struct InvoiceView: View {
                 }
                 TextField("Ghi chú hóa đơn (VD: Tặng hộp kỹ thuật, dây mạng...)", text: $invoiceNotes)
                     .padding(8)
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color.gray.opacity(0.08))
                     .cornerRadius(6)
 
                 Divider()
@@ -767,12 +767,12 @@ struct ProductLibraryModalView: View {
                     HStack {
                         TextField("Model (VD: DH-IPC-HDW1230T)", text: $newModel)
                             .padding(6)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .background(Color.gray.opacity(0.08))
                             .cornerRadius(6)
 
                         TextField("Tên SP *", text: $newName)
                             .padding(6)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .background(Color.gray.opacity(0.08))
                             .cornerRadius(6)
                     }
 
@@ -780,13 +780,13 @@ struct ProductLibraryModalView: View {
                         TextField("ĐVT", text: $newUnit)
                             .frame(width: 60)
                             .padding(6)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .background(Color.gray.opacity(0.08))
                             .cornerRadius(6)
 
                         TextField("Đơn giá (VD: 1.250.000)", text: $newPriceText)
                             .keyboardType(.numbersAndPunctuation)
                             .padding(6)
-                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .background(Color.gray.opacity(0.08))
                             .cornerRadius(6)
 
                         Button(action: addProduct) {
@@ -801,7 +801,7 @@ struct ProductLibraryModalView: View {
                     }
                 }
                 .padding(10)
-                .background(Color(UIColor.systemGroupedBackground))
+                .background(Color.gray.opacity(0.05))
 
                 // List of products
                 List {
@@ -960,7 +960,7 @@ struct InvoicePreviewModalView: View {
                             .foregroundColor(.secondary)
                             .padding(.vertical, 10)
                             .padding(.horizontal, 16)
-                            .background(Color(UIColor.secondarySystemBackground))
+                            .background(Color.gray.opacity(0.1))
                             .cornerRadius(8)
                     }
 

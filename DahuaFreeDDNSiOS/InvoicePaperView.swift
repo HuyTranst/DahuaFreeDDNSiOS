@@ -178,7 +178,7 @@ struct InvoicePaperView: View {
                     }
                     .padding(.vertical, 6)
                     .padding(.horizontal, 16)
-                    .background(index % 2 == 0 ? Color.white : Color(UIColor.systemGray6))
+                    .background(index % 2 == 0 ? Color.white : Color.gray.opacity(0.1))
 
                     Divider().padding(.horizontal, 16)
                 }
@@ -277,23 +277,14 @@ struct InvoicePaperView: View {
 extension View {
     func renderAsImage(targetSize: CGSize = CGSize(width: 595, height: 842)) -> UIImage? {
         let controller = UIHostingController(rootView: self.edgesIgnoringSafeArea(.all))
-        let view = controller.view
+        guard let view = controller.view else { return nil }
 
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 2.0 // High-res retina 2x
+        view.bounds = CGRect(origin: .zero, size: targetSize)
+        view.backgroundColor = .white
 
-        view?.bounds = CGRect(origin: .zero, size: targetSize)
-        view?.backgroundColor = .white
-
-        let window = UIWindow(frame: CGRect(origin: .zero, size: targetSize))
-        window.rootViewController = controller
-        window.makeKeyAndVisible()
-
-        view?.layoutIfNeeded()
-
-        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
-        return renderer.image { _ in
-            view?.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        return renderer.image { ctx in
+            view.layer.render(in: ctx.cgContext)
         }
     }
 }
