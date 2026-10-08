@@ -294,7 +294,7 @@ struct InvoiceView: View {
                 HStack {
                     Spacer()
                     Text("Tiếp theo: Thêm sản phẩm")
-                        .bold()
+                        .font(.body.weight(.bold))
                     Image(systemName: "arrow.right")
                     Spacer()
                 }
@@ -407,7 +407,7 @@ struct InvoiceView: View {
                         Spacer()
                         Image(systemName: "plus")
                         Text("Thêm vào hóa đơn")
-                            .bold()
+                            .font(.body.weight(.bold))
                         Spacer()
                     }
                     .padding(.vertical, 9)
@@ -554,7 +554,7 @@ struct InvoiceView: View {
                         Spacer()
                         Image(systemName: "doc.text.magnifyingglass")
                         Text("XEM TRƯỚC & XUẤT ẢNH")
-                            .bold()
+                            .font(.body.weight(.bold))
                         Spacer()
                     }
                     .padding(.vertical, 12)
@@ -727,16 +727,18 @@ struct CompanySetupModalView: View {
                     Button("Hủy") { presentationMode.wrappedValue.dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Lưu") {
+                    Button(action: {
                         company.name = name
                         company.address = address
                         company.phone = phone
                         company.email = email
                         company.bankAccount = bank
                         presentationMode.wrappedValue.dismiss()
+                    }) {
+                        Text("Lưu")
+                            .font(.headline)
+                            .foregroundColor(.orange)
                     }
-                    .bold()
-                    .foregroundColor(.orange)
                 }
             }
             .onAppear {
@@ -970,7 +972,7 @@ struct InvoicePreviewModalView: View {
                         HStack {
                             Image(systemName: "photo.badge.arrow.down.fill")
                             Text("XUẤT ẢNH JPG GỬI KHÁCH")
-                                .bold()
+                                .font(.body.weight(.bold))
                         }
                         .foregroundColor(.white)
                         .padding(.vertical, 10)

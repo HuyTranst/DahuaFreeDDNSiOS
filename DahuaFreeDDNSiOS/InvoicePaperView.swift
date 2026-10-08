@@ -67,7 +67,6 @@ struct InvoicePaperView: View {
                 Text("HÓA ĐƠN BÁN HÀNG")
                     .font(.system(size: 22, weight: .heavy))
                     .foregroundColor(.orange)
-                    .tracking(1.5)
 
                 Rectangle()
                     .fill(Color.orange)
