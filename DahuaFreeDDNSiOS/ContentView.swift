@@ -474,6 +474,9 @@ struct ContentView: View {
     @State private var logHistory: String = "Ứng dụng Dahua & Imou Manager iOS đã sẵn sàng.\n"
     @State private var rawFetchedConfig: String = ""
 
+    // Banner Animation State
+    @State private var isBannerAnimated: Bool = false
+
     private let cgiClient = DahuaCgiClient()
     private let warrantyClient = DahuaWarrantyClient()
 
@@ -1103,17 +1106,70 @@ struct ContentView: View {
     var trangChuView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Compact Home Banner (~50% height reduction)
+                // Compact Home Banner (~50% height reduction) with eye-catching animation
                 ZStack {
-                    LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.9), Color.orange]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .cornerRadius(12)
+                    // Animated multi-color warm glowing gradient
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.orange,
+                            Color(red: 1.0, green: 0.65, blue: 0.0),
+                            Color(red: 0.95, green: 0.45, blue: 0.05)
+                        ]),
+                        startPoint: isBannerAnimated ? .topLeading : .bottomLeading,
+                        endPoint: isBannerAnimated ? .bottomTrailing : .topTrailing
+                    )
+                    .cornerRadius(12)
+
+                    // Animated background decorative floating circles & soft glow
+                    GeometryReader { geo in
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.12))
+                                .frame(width: 80, height: 80)
+                                .offset(x: isBannerAnimated ? geo.size.width * 0.7 : geo.size.width * 0.1,
+                                        y: isBannerAnimated ? -10 : 20)
+                            
+                            Circle()
+                                .fill(Color.yellow.opacity(0.18))
+                                .frame(width: 50, height: 50)
+                                .offset(x: isBannerAnimated ? geo.size.width * 0.2 : geo.size.width * 0.8,
+                                        y: isBannerAnimated ? 15 : -15)
+
+                            // Shimmer light beam running across the banner
+                            Rectangle()
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.white.opacity(0.0),
+                                            Color.white.opacity(0.22),
+                                            Color.white.opacity(0.0)
+                                        ]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: 60)
+                                .rotationEffect(.degrees(25))
+                                .offset(x: isBannerAnimated ? geo.size.width + 50 : -90)
+                        }
+                    }
+                    .clipped()
+                    .cornerRadius(12)
 
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text("Công cụ hổ trợ Dahua & Imou")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.yellow)
+                                    .scaleEffect(isBannerAnimated ? 1.2 : 0.85)
+                                    .rotationEffect(.degrees(isBannerAnimated ? 15 : -15))
+
+                                Text("Công cụ hổ trợ Dahua & Imou")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                            }
 
                             Button(action: {
                                 if let url = URL(string: "https://zalo.me/0909080119") {
@@ -1132,15 +1188,18 @@ struct ContentView: View {
                                 .background(Color.white)
                                 .foregroundColor(.orange)
                                 .cornerRadius(12)
+                                .shadow(color: Color.black.opacity(0.08), radius: 2, y: 1)
                             }
                         }
                         Spacer()
 
+                        // Logo with breathing/pulse animation
                         CameraLogoIcon(brand: .imou)
                             .frame(width: 44, height: 44)
                             .background(Color.white)
                             .cornerRadius(10)
-                            .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+                            .shadow(color: Color.black.opacity(0.15), radius: isBannerAnimated ? 5 : 2, x: 0, y: isBannerAnimated ? 2 : 1)
+                            .scaleEffect(isBannerAnimated ? 1.04 : 0.98)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -1353,6 +1412,11 @@ struct ContentView: View {
                 }
             }
             .padding(.vertical)
+        }
+        .onAppear {
+            withAnimation(Animation.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                isBannerAnimated = true
+            }
         }
     }
 
@@ -2564,7 +2628,7 @@ struct ContentView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack {
-                                        Text("\(res.port)")
+                                        Text(String(res.port))
                                             .font(.system(.headline, design: .monospaced))
                                             .bold()
                                         Text("(\(res.service))")
@@ -4556,7 +4620,7 @@ struct DeviceRowView: View {
 
                 HStack(spacing: 6) {
                     if device.tcpPort > 0 {
-                        Text("TCP: \(device.tcpPort)")
+                        Text("TCP: \(String(device.tcpPort))")
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
@@ -4566,7 +4630,7 @@ struct DeviceRowView: View {
                     }
 
                     if device.httpPort > 0 {
-                        Text("HTTP: \(device.httpPort)")
+                        Text("HTTP: \(String(device.httpPort))")
                             .font(.caption2)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
@@ -4643,8 +4707,8 @@ struct DeviceDetailView: View {
                     DetailRow(title: "Subnet Mask", value: device.subnetMask)
                     DetailRow(title: "Default Gateway", value: device.gateway)
                     DetailRow(title: "DHCP", value: device.dhcpEnabled ? "Bật (Enabled)" : "Tắt (Static IP)")
-                    DetailRow(title: "Cổng TCP NetSDK", value: "\(device.tcpPort)")
-                    DetailRow(title: "Cổng Web HTTP", value: "\(device.httpPort)")
+                    DetailRow(title: "Cổng TCP NetSDK", value: String(device.tcpPort))
+                    DetailRow(title: "Cổng Web HTTP", value: String(device.httpPort))
                 }
 
                 if let onAction = onAction {
