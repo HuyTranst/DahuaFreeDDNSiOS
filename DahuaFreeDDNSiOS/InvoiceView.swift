@@ -726,7 +726,7 @@ struct CompanySetupModalView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Hủy") { presentationMode.wrappedValue.dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Lưu") {
                         company.name = name
                         company.address = address
@@ -847,7 +847,7 @@ struct ProductLibraryModalView: View {
             .navigationTitle("Kho Sản Phẩm Camera")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Đóng") { presentationMode.wrappedValue.dismiss() }
                 }
             }
@@ -930,7 +930,7 @@ struct SavedInvoicesModalView: View {
             .navigationTitle("Hóa Đơn Đã Lưu")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Đóng") { presentationMode.wrappedValue.dismiss() }
                 }
             }
