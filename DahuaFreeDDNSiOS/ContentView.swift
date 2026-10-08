@@ -1106,52 +1106,37 @@ struct ContentView: View {
     var trangChuView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Compact Home Banner (~50% height reduction) with eye-catching animation
+                // Compact Home Banner (~50% height reduction) with sleek horizontal shimmer
                 ZStack {
-                    // Animated multi-color warm glowing gradient
+                    // Fixed warm orange-gold gradient background (No bouncing/moving)
                     LinearGradient(
                         gradient: Gradient(colors: [
                             Color.orange,
-                            Color(red: 1.0, green: 0.65, blue: 0.0),
-                            Color(red: 0.95, green: 0.45, blue: 0.05)
+                            Color(red: 1.0, green: 0.62, blue: 0.05),
+                            Color(red: 0.95, green: 0.48, blue: 0.05)
                         ]),
-                        startPoint: isBannerAnimated ? .topLeading : .bottomLeading,
-                        endPoint: isBannerAnimated ? .bottomTrailing : .topTrailing
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
                     .cornerRadius(12)
 
-                    // Animated background decorative floating circles & soft glow
+                    // Subtle horizontal shimmer beam running across smoothly
                     GeometryReader { geo in
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.12))
-                                .frame(width: 80, height: 80)
-                                .offset(x: isBannerAnimated ? geo.size.width * 0.7 : geo.size.width * 0.1,
-                                        y: isBannerAnimated ? -10 : 20)
-                            
-                            Circle()
-                                .fill(Color.yellow.opacity(0.18))
-                                .frame(width: 50, height: 50)
-                                .offset(x: isBannerAnimated ? geo.size.width * 0.2 : geo.size.width * 0.8,
-                                        y: isBannerAnimated ? 15 : -15)
-
-                            // Shimmer light beam running across the banner
-                            Rectangle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.white.opacity(0.0),
-                                            Color.white.opacity(0.22),
-                                            Color.white.opacity(0.0)
-                                        ]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.white.opacity(0.0),
+                                        Color.white.opacity(0.20),
+                                        Color.white.opacity(0.0)
+                                    ]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
                                 )
-                                .frame(width: 60)
-                                .rotationEffect(.degrees(25))
-                                .offset(x: isBannerAnimated ? geo.size.width + 50 : -90)
-                        }
+                            )
+                            .frame(width: 50)
+                            .rotationEffect(.degrees(20))
+                            .offset(x: isBannerAnimated ? geo.size.width + 60 : -70)
                     }
                     .clipped()
                     .cornerRadius(12)
@@ -1162,8 +1147,6 @@ struct ContentView: View {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundColor(.yellow)
-                                    .scaleEffect(isBannerAnimated ? 1.2 : 0.85)
-                                    .rotationEffect(.degrees(isBannerAnimated ? 15 : -15))
 
                                 Text("Công cụ hổ trợ Dahua & Imou")
                                     .font(.system(size: 16, weight: .bold))
@@ -1188,18 +1171,17 @@ struct ContentView: View {
                                 .background(Color.white)
                                 .foregroundColor(.orange)
                                 .cornerRadius(12)
-                                .shadow(color: Color.black.opacity(0.08), radius: 2, y: 1)
+                                .shadow(color: Color.black.opacity(0.06), radius: 2, y: 1)
                             }
                         }
                         Spacer()
 
-                        // Logo with breathing/pulse animation
+                        // Stable Logo (Fixed position, crisp appearance)
                         CameraLogoIcon(brand: .imou)
                             .frame(width: 44, height: 44)
                             .background(Color.white)
                             .cornerRadius(10)
-                            .shadow(color: Color.black.opacity(0.15), radius: isBannerAnimated ? 5 : 2, x: 0, y: isBannerAnimated ? 2 : 1)
-                            .scaleEffect(isBannerAnimated ? 1.04 : 0.98)
+                            .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -1414,7 +1396,7 @@ struct ContentView: View {
             .padding(.vertical)
         }
         .onAppear {
-            withAnimation(Animation.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+            withAnimation(Animation.linear(duration: 3.5).repeatForever(autoreverses: false)) {
                 isBannerAnimated = true
             }
         }
