@@ -1167,38 +1167,101 @@ struct ContentView: View {
                     .disabled(scanner.isScanning)
 
                     if !scanner.discoveredDevices.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("S/N Camera phát hiện từ mạng LAN (Nhấn để tra cứu nhanh):")
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Image(systemName: "checklist")
+                                    .foregroundColor(.orange)
+                                Text("Danh Sách Camera LAN (\(scanner.discoveredDevices.filter { !$0.sn.isEmpty }.count) thiết bị):")
+                                    .font(.subheadline.weight(.bold))
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 4)
+
+                            Text("Nhấn vào camera hoặc nút 'Tra Cứu' để kiểm tra bảo hành ngay:")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal)
 
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(scanner.discoveredDevices) { dev in
-                                        if !dev.sn.isEmpty && dev.brand != .noName {
-                                            Button(action: {
-                                                let cleaned = self.cleanSerialNumber(dev.sn)
-                                                self.rawScannedSn = dev.sn
-                                                self.cleanedSn = cleaned
-                                                self.triggerDirectWarrantyCheck(sn: cleaned)
-                                            }) {
-                                                HStack(spacing: 4) {
-                                                    Image(systemName: "camera.fill")
-                                                    Text("\(dev.ip) (\(dev.sn))")
+                            VStack(spacing: 8) {
+                                ForEach(scanner.discoveredDevices) { dev in
+                                    if !dev.sn.isEmpty {
+                                        Button(action: {
+                                            let cleaned = self.cleanSerialNumber(dev.sn)
+                                            self.rawScannedSn = dev.sn
+                                            self.cleanedSn = cleaned
+                                            self.triggerDirectWarrantyCheck(sn: cleaned)
+                                        }) {
+                                            HStack(spacing: 12) {
+                                                // Icon brand avatar
+                                                ZStack {
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill(dev.brand == .noName ? Color.gray.opacity(0.12) : (dev.brand == .imou ? Color.orange.opacity(0.15) : Color.red.opacity(0.15)))
+                                                        .frame(width: 44, height: 44)
+
+                                                    Image(systemName: "video.fill")
+                                                        .font(.system(size: 20))
+                                                        .foregroundColor(dev.brand == .noName ? .gray : (dev.brand == .imou ? .orange : .red))
                                                 }
-                                                .font(.caption2.weight(.bold))
+
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    HStack(spacing: 6) {
+                                                        Text(dev.ip)
+                                                            .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                                                            .foregroundColor(.primary)
+
+                                                        Text(dev.brand.rawValue)
+                                                            .font(.system(size: 10, weight: .bold))
+                                                            .padding(.horizontal, 6)
+                                                            .padding(.vertical, 2)
+                                                            .background(dev.brand == .imou ? Color.orange.opacity(0.15) : Color.red.opacity(0.15))
+                                                            .foregroundColor(dev.brand == .imou ? .orange : .red)
+                                                            .cornerRadius(4)
+                                                    }
+
+                                                    HStack(spacing: 4) {
+                                                        Text("S/N:")
+                                                            .font(.caption2.weight(.bold))
+                                                            .foregroundColor(.secondary)
+                                                        Text(dev.sn)
+                                                            .font(.system(.caption, design: .monospaced).weight(.semibold))
+                                                            .foregroundColor(.primary)
+                                                    }
+
+                                                    if !dev.deviceType.isEmpty {
+                                                        Text("Model: \(dev.deviceType)")
+                                                            .font(.caption2)
+                                                            .foregroundColor(.gray)
+                                                    }
+                                                }
+
+                                                Spacer()
+
+                                                // Nút Tra Cứu
+                                                HStack(spacing: 4) {
+                                                    Image(systemName: "magnifyingglass")
+                                                    Text("Tra Cứu")
+                                                }
+                                                .font(.caption.weight(.bold))
                                                 .padding(.horizontal, 10)
                                                 .padding(.vertical, 6)
-                                                .background(Color.orange.opacity(0.15))
-                                                .foregroundColor(.orange)
+                                                .background(Color.orange)
+                                                .foregroundColor(.white)
                                                 .cornerRadius(8)
                                             }
+                                            .padding(12)
+                                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                                            .cornerRadius(12)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.orange.opacity(0.25), lineWidth: 1)
+                                            )
                                         }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
                                 }
-                                .padding(.horizontal)
                             }
+                            .padding(.horizontal)
                         }
                         .padding(.top, 4)
                     }
