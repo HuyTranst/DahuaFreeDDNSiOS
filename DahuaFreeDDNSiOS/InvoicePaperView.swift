@@ -42,15 +42,13 @@ enum InvoiceAspectRatio: String, CaseIterable, Identifiable {
         switch self {
         case .ratio9_16:
             // 9:16 standard smartphone screen: 390 * 16 / 9 ~ 693.3 pt
-            // If items exceed standard bounds, expand dynamically while maintaining readable spacing
             let standardHeight = 390.0 * 16.0 / 9.0 // ~693.3
             let neededHeight: CGFloat = 340.0 + CGFloat(itemsCount * 28)
             return max(standardHeight, neededHeight)
         case .ratio6_19:
-            // 6:19 tall bill scroll format: 390 * 19 / 6 = 1235.0 pt
-            let standardHeight = 390.0 * 19.0 / 6.0 // 1235.0
+            // 6:19 dài vừa vặn, tính chuẩn theo số lượng sản phẩm để chữ ký không bị tụt xa
             let neededHeight: CGFloat = 380.0 + CGFloat(itemsCount * 32)
-            return max(standardHeight, neededHeight)
+            return max(600.0, neededHeight)
         }
     }
 }
@@ -383,9 +381,7 @@ struct InvoicePaperView: View {
                 .padding(.top, 4)
             }
 
-            if !is916 {
-                Spacer(minLength: 16)
-            }
+            Spacer(minLength: 8)
 
             // 6. Chữ Ký
             HStack(alignment: .top) {
@@ -424,6 +420,8 @@ struct InvoicePaperView: View {
 extension View {
     @MainActor
     func renderAsImage(targetSize: CGSize = CGSize(width: 390, height: 693.3)) -> UIImage? {
+        var finalImage: UIImage? = nil
+
         // 1. Đối với iOS 16+, dùng ImageRenderer (Chính chủ Apple, xuất ảnh sắc nét 100%, không bao giờ bị trắng)
         if #available(iOS 16.0, *) {
             let wrappedView = self.frame(width: targetSize.width, height: targetSize.height)
@@ -431,40 +429,124 @@ extension View {
             renderer.proposedSize = ProposedViewSize(targetSize)
             renderer.scale = 2.0
             if let img = renderer.uiImage {
-                return img
+                finalImage = img
             }
         }
 
         // 2. Dự phòng chuẩn UIKit (iOS 15): Gắn vào UIWindow tạm thời để hệ thống kích hoạt render layout đầy đủ
-        let controller = UIHostingController(rootView: self.edgesIgnoringSafeArea(.all))
-        guard let view = controller.view else { return nil }
+        if finalImage == nil {
+            let controller = UIHostingController(rootView: self.edgesIgnoringSafeArea(.all))
+            if let view = controller.view {
+                view.frame = CGRect(origin: .zero, size: targetSize)
+                view.backgroundColor = .white
 
-        view.frame = CGRect(origin: .zero, size: targetSize)
-        view.backgroundColor = .white
+                let currentWindow = UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .flatMap { $0.windows }
+                    .first { $0.isKeyWindow }
 
-        // Tìm keyWindow hiện tại hoặc tạo cửa sổ ảo để view có môi trường render thật
-        let currentWindow = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow }
+                let tempWindow = currentWindow ?? UIWindow(frame: CGRect(origin: .zero, size: targetSize))
+                tempWindow.addSubview(view)
 
-        let tempWindow = currentWindow ?? UIWindow(frame: CGRect(origin: .zero, size: targetSize))
-        tempWindow.addSubview(view)
+                view.setNeedsLayout()
+                view.layoutIfNeeded()
 
-        view.setNeedsLayout()
-        view.layoutIfNeeded()
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 2.0
+                format.opaque = true
 
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 2.0
-        format.opaque = true
+                let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+                finalImage = renderer.image { ctx in
+                    view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+                }
 
-        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
-        let capturedImage = renderer.image { ctx in
-            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+                view.removeFromSuperview()
+            }
         }
 
-        view.removeFromSuperview()
-        return capturedImage
+        // Tự động crop bỏ khoảng trắng thừa ở trên và dưới ảnh
+        if let img = finalImage {
+            return img.cropExcessVerticalWhitespace(padding: 16) ?? img
+        }
+        return nil
+    }
+}
+
+// MARK: - Auto-Crop White Borders Extension (Cắt bớt phần trắng dư thừa trên và dưới)
+extension UIImage {
+    func cropExcessVerticalWhitespace(padding: CGFloat = 16) -> UIImage? {
+        guard let cg = self.cgImage else { return self }
+        let width = cg.width
+        let height = cg.height
+        
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bytesPerPixel = 4
+        let bytesPerRow = bytesPerPixel * width
+        var pixelData = [UInt8](repeating: 0, count: width * height * bytesPerPixel)
+        
+        guard let context = CGContext(
+            data: &pixelData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return self }
+        
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: width, height: height))
+        
+        var topBound = 0
+        var bottomBound = height - 1
+        
+        func isNonWhite(x: Int, y: Int) -> Bool {
+            let offset = (y * width + x) * bytesPerPixel
+            let r = pixelData[offset]
+            let g = pixelData[offset + 1]
+            let b = pixelData[offset + 2]
+            let a = pixelData[offset + 3]
+            // Nếu có màu khác màu trắng hoặc alpha khác 0
+            if a < 10 { return false }
+            return r < 248 || g < 248 || b < 248
+        }
+        
+        // Quét tìm dòng có nội dung từ trên xuống
+        findTop: for y in 0..<height {
+            for x in stride(from: 0, to: width, by: 4) {
+                if isNonWhite(x: x, y: y) {
+                    topBound = y
+                    break findTop
+                }
+            }
+        }
+        
+        // Quét tìm dòng có nội dung từ dưới lên
+        findBottom: for y in stride(from: height - 1, through: 0, by: -1) {
+            for x in stride(from: 0, to: width, by: 4) {
+                if isNonWhite(x: x, y: y) {
+                    bottomBound = y
+                    break findBottom
+                }
+            }
+        }
+        
+        if topBound >= bottomBound {
+            return self
+        }
+        
+        // Thêm khoảng đệm an toàn padding (tính theo pixel)
+        let scaledPadding = Int(padding * self.scale)
+        let startY = max(0, topBound - scaledPadding)
+        let endY = min(height - 1, bottomBound + scaledPadding)
+        let cropHeight = endY - startY + 1
+        
+        if cropHeight <= 0 || cropHeight >= height {
+            return self
+        }
+        
+        let cropRect = CGRect(x: 0, y: startY, width: width, height: cropHeight)
+        guard let croppedCG = cg.cropping(to: cropRect) else { return self }
+        return UIImage(cgImage: croppedCG, scale: self.scale, orientation: self.imageOrientation)
     }
 }
 
