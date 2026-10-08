@@ -630,10 +630,10 @@ struct ContentView: View {
             }
             .tag(0)
 
-            // Tab 2: Check Port
+            // Tab 2: Hóa Đơn (Tạo hóa đơn bán hàng camera & xuất JPG)
             NavigationView {
-                checkPortModalView
-                    .navigationTitle("Check Port")
+                InvoiceView()
+                    .navigationTitle("Hóa Đơn Bán Hàng")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .navigationBarLeading) {
@@ -642,8 +642,8 @@ struct ContentView: View {
                     }
             }
             .tabItem {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                Text("Check Port")
+                Image(systemName: "doc.text.fill")
+                Text("Hóa Đơn")
             }
             .tag(1)
 
@@ -932,7 +932,7 @@ struct ContentView: View {
             }
 
             Button(action: {
-                self.selectedTab = 1
+                self.activeModalType = .checkPort
             }) {
                 Label("2. Check Port", systemImage: "antenna.radiowaves.left.and.right")
             }

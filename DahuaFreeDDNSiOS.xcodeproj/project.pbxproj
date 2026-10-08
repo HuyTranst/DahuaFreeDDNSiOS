@@ -10,6 +10,9 @@
 		A10000012C9F000000000001 /* DahuaFreeDDNSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000012C9F000000000001 /* DahuaFreeDDNSApp.swift */; };
 		A10000022C9F000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000022C9F000000000002 /* ContentView.swift */; };
 		A10000032C9F000000000003 /* DahuaCgiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000032C9F000000000003 /* DahuaCgiClient.swift */; };
+		A10000042C9F000000000004 /* InvoiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000042C9F000000000004 /* InvoiceManager.swift */; };
+		A10000052C9F000000000005 /* InvoicePaperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000052C9F000000000005 /* InvoicePaperView.swift */; };
+		A10000062C9F000000000006 /* InvoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000062C9F000000000006 /* InvoiceView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -17,6 +20,9 @@
 		B10000012C9F000000000001 /* DahuaFreeDDNSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DahuaFreeDDNSApp.swift; path = DahuaFreeDDNSApp.swift; sourceTree = "<group>"; };
 		B10000022C9F000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ContentView.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		B10000032C9F000000000003 /* DahuaCgiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DahuaCgiClient.swift; path = DahuaCgiClient.swift; sourceTree = "<group>"; };
+		B10000042C9F000000000004 /* InvoiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvoiceManager.swift; path = InvoiceManager.swift; sourceTree = "<group>"; };
+		B10000052C9F000000000005 /* InvoicePaperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvoicePaperView.swift; path = InvoicePaperView.swift; sourceTree = "<group>"; };
+		B10000062C9F000000000006 /* InvoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvoiceView.swift; path = InvoiceView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,6 +50,9 @@
 				B10000012C9F000000000001 /* DahuaFreeDDNSApp.swift */,
 				B10000022C9F000000000002 /* ContentView.swift */,
 				B10000032C9F000000000003 /* DahuaCgiClient.swift */,
+				B10000042C9F000000000004 /* InvoiceManager.swift */,
+				B10000052C9F000000000005 /* InvoicePaperView.swift */,
+				B10000062C9F000000000006 /* InvoiceView.swift */,
 			);
 			name = DahuaFreeDDNSiOS;
 			sourceTree = "<group>";
@@ -116,6 +125,9 @@
 				A10000012C9F000000000001 /* DahuaFreeDDNSApp.swift in Sources */,
 				A10000022C9F000000000002 /* ContentView.swift in Sources */,
 				A10000032C9F000000000003 /* DahuaCgiClient.swift in Sources */,
+				A10000042C9F000000000004 /* InvoiceManager.swift in Sources */,
+				A10000052C9F000000000005 /* InvoicePaperView.swift in Sources */,
+				A10000062C9F000000000006 /* InvoiceView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
