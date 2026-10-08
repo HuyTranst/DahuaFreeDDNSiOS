@@ -4912,16 +4912,10 @@ struct DeviceRowView: View {
                     Spacer()
 
                     Button(action: onSettingsTapped) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "gearshape.fill")
-                            Text("Cài đặt")
-                        }
-                        .font(.caption.weight(.bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(device.brand == .noName ? Color.blue : Color.orange)
-                        .cornerRadius(6)
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(device.brand == .noName ? .blue : .orange)
+                            .padding(4)
                     }
                     .buttonStyle(BorderlessButtonStyle())
                 }
