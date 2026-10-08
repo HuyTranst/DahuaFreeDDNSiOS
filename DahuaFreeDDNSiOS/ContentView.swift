@@ -5037,7 +5037,7 @@ struct CctvCalcConstants {
     }
 }
 
-struct MultiCameraRowItem: Identifiable {
+struct MultiCameraRowItem: Identifiable, Equatable {
     let id = UUID()
     var name: String
     var resIdx: Int
@@ -5047,13 +5047,29 @@ struct MultiCameraRowItem: Identifiable {
     var qty: Int = 1
 }
 
+struct NumberIntField: View {
+    let title: String
+    @Binding var value: Int
+    var width: CGFloat = 50
+
+    var body: some View {
+        TextField(title, text: Binding(
+            get: { "\(value)" },
+            set: { if let v = Int($0) { value = max(1, v) } }
+        ))
+        .keyboardType(.numberPad)
+        .textFieldStyle(RoundedBorderTextFieldStyle())
+        .frame(width: width)
+        .multilineTextAlignment(.center)
+    }
+}
+
 // MARK: - Root Modal Container View
 struct CctvCalculatorModalView: View {
     @State var selectedCalcTool: CctvCalcToolType = .storage
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top Tab Picker between the 3 calculators
             Picker("Công Cụ", selection: $selectedCalcTool) {
                 ForEach(CctvCalcToolType.allCases) { tool in
                     Text(tool.rawValue.replacingOccurrences(of: "TÍNH ", with: "")).tag(tool)
@@ -5064,7 +5080,6 @@ struct CctvCalculatorModalView: View {
             .padding(.vertical, 10)
             .background(Color(UIColor.secondarySystemBackground))
 
-            // Body Switch
             Group {
                 switch selectedCalcTool {
                 case .storage:
@@ -5102,7 +5117,6 @@ struct BandwidthCalculatorView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Subtab Switcher
                 Picker("Loại", selection: $subTab) {
                     Text("Camera giống nhau").tag(0)
                     Text("Nhiều loại camera").tag(1)
@@ -5150,8 +5164,8 @@ struct BandwidthCalculatorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: t1ResIdx) { _ in
-                        t1Bitrate = "\(CctvCalcConstants.defaultBandwidthBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx))"
+                    .onChange(of: t1ResIdx) { newRes in
+                        t1Bitrate = "\(CctvCalcConstants.defaultBandwidthBitrate(resIdx: newRes, compIdx: t1CompIdx))"
                     }
                 }
 
@@ -5165,8 +5179,8 @@ struct BandwidthCalculatorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: t1CompIdx) { _ in
-                        t1Bitrate = "\(CctvCalcConstants.defaultBandwidthBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx))"
+                    .onChange(of: t1CompIdx) { newComp in
+                        t1Bitrate = "\(CctvCalcConstants.defaultBandwidthBitrate(resIdx: t1ResIdx, compIdx: newComp))"
                     }
                 }
 
@@ -5246,81 +5260,82 @@ struct BandwidthCalculatorView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
-            ForEach(t2Rows.indices, id: \.self) { idx in
-                VStack(spacing: 10) {
-                    HStack {
-                        Text("#\(idx + 1)")
-                            .font(.caption.bold())
-                            .foregroundColor(.orange)
-                        TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                        Spacer()
-                        if t2Rows.count > 1 {
-                            Button(action: { t2Rows.remove(at: idx) }) {
-                                Image(systemName: "trash.fill")
-                                    .foregroundColor(.red)
+            ForEach(0..<t2Rows.count, id: \.self) { idx in
+                if idx < t2Rows.count {
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("#\(idx + 1)")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                            TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Spacer()
+                            if t2Rows.count > 1 {
+                                Button(action: {
+                                    if idx < t2Rows.count {
+                                        t2Rows.remove(at: idx)
+                                    }
+                                }) {
+                                    Image(systemName: "trash.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                }
+                            }
+                        }
+
+                        HStack {
+                            Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
+                                ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
+                                    Text(CctvCalcConstants.resolutions[r]).tag(r)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            .onChange(of: t2Rows[idx].resIdx) { newRes in
+                                if idx < t2Rows.count {
+                                    t2Rows[idx].bitrate = CctvCalcConstants.defaultBandwidthBitrate(resIdx: newRes, compIdx: t2Rows[idx].compIdx)
+                                }
+                            }
+
+                            Spacer()
+
+                            Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
+                                ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
+                                    Text(CctvCalcConstants.compressions[c]).tag(c)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            .onChange(of: t2Rows[idx].compIdx) { newComp in
+                                if idx < t2Rows.count {
+                                    t2Rows[idx].bitrate = CctvCalcConstants.defaultBandwidthBitrate(resIdx: t2Rows[idx].resIdx, compIdx: newComp)
+                                }
+                            }
+                        }
+
+                        HStack(spacing: 12) {
+                            HStack(spacing: 4) {
+                                Text("Kbps:")
                                     .font(.caption)
+                                NumberIntField(title: "1440", value: $t2Rows[idx].bitrate, width: 70)
+                            }
+
+                            HStack(spacing: 4) {
+                                Text("Stream:")
+                                    .font(.caption)
+                                NumberIntField(title: "1", value: $t2Rows[idx].streams, width: 45)
+                            }
+
+                            HStack(spacing: 4) {
+                                Text("Số cam:")
+                                    .font(.caption)
+                                NumberIntField(title: "1", value: $t2Rows[idx].qty, width: 45)
                             }
                         }
                     }
-
-                    HStack {
-                        Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
-                            ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
-                                Text(CctvCalcConstants.resolutions[r]).tag(r)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: t2Rows[idx].resIdx) { _ in
-                            t2Rows[idx].bitrate = CctvCalcConstants.defaultBandwidthBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
-                        }
-
-                        Spacer()
-
-                        Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
-                            ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
-                                Text(CctvCalcConstants.compressions[c]).tag(c)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: t2Rows[idx].compIdx) { _ in
-                            t2Rows[idx].bitrate = CctvCalcConstants.defaultBandwidthBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
-                        }
-                    }
-
-                    HStack(spacing: 12) {
-                        HStack(spacing: 4) {
-                            Text("Kbps:")
-                                .font(.caption)
-                            TextField("1440", value: $t2Rows[idx].bitrate, formatter: NumberFormatter())
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .frame(width: 70)
-                        }
-
-                        HStack(spacing: 4) {
-                            Text("Stream:")
-                                .font(.caption)
-                            TextField("1", value: $t2Rows[idx].streams, formatter: NumberFormatter())
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .frame(width: 45)
-                        }
-
-                        HStack(spacing: 4) {
-                            Text("Số cam:")
-                                .font(.caption)
-                            TextField("1", value: $t2Rows[idx].qty, formatter: NumberFormatter())
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .frame(width: 45)
-                        }
-                    }
+                    .padding(12)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
                 }
-                .padding(12)
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                .padding(.horizontal)
             }
 
             Button(action: {
@@ -5425,7 +5440,6 @@ struct DiskStorageCalculatorView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Subtab Switcher
                 Picker("Chế độ", selection: $subTab) {
                     Text("Cam giống nhau").tag(0)
                     Text("Nhiều loại cam").tag(1)
@@ -5470,8 +5484,8 @@ struct DiskStorageCalculatorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: t1ResIdx) { _ in
-                        t1Bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    .onChange(of: t1ResIdx) { newRes in
+                        t1Bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: newRes, compIdx: t1CompIdx)
                     }
                 }
 
@@ -5485,8 +5499,8 @@ struct DiskStorageCalculatorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: t1CompIdx) { _ in
-                        t1Bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    .onChange(of: t1CompIdx) { newComp in
+                        t1Bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t1ResIdx, compIdx: newComp)
                     }
                 }
 
@@ -5507,7 +5521,6 @@ struct DiskStorageCalculatorView: View {
             .cornerRadius(12)
             .padding(.horizontal)
 
-            // Mode Selector
             Picker("Phương thức tính", selection: $t1CalcMode) {
                 Text("Tính theo ngày").tag(0)
                 Text("Tính theo ổ cứng").tag(1)
@@ -5661,74 +5674,81 @@ struct DiskStorageCalculatorView: View {
                 .padding(.horizontal)
             }
 
-            ForEach(t2Rows.indices, id: \.self) { idx in
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("#\(idx + 1)")
-                            .font(.caption.bold())
-                            .foregroundColor(.orange)
-                        TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                        Spacer()
-                        if t2Rows.count > 1 {
-                            Button(action: { t2Rows.remove(at: idx) }) {
-                                Image(systemName: "trash.fill")
-                                    .foregroundColor(.red)
-                                    .font(.caption)
+            ForEach(0..<t2Rows.count, id: \.self) { idx in
+                if idx < t2Rows.count {
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("#\(idx + 1)")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                            TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Spacer()
+                            if t2Rows.count > 1 {
+                                Button(action: {
+                                    if idx < t2Rows.count {
+                                        t2Rows.remove(at: idx)
+                                    }
+                                }) {
+                                    Image(systemName: "trash.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                }
                             }
                         }
-                    }
 
-                    HStack {
-                        Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
-                            ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
-                                Text(CctvCalcConstants.resolutions[r]).tag(r)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: t2Rows[idx].resIdx) { _ in
-                            t2Rows[idx].bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
-                        }
-
-                        Spacer()
-
-                        Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
-                            ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
-                                Text(CctvCalcConstants.compressions[c]).tag(c)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: t2Rows[idx].compIdx) { _ in
-                            t2Rows[idx].bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
-                        }
-                    }
-
-                    HStack(spacing: 14) {
-                        HStack(spacing: 4) {
-                            Text("Kbps:")
-                                .font(.caption)
-                            Picker("", selection: $t2Rows[idx].bitrate) {
-                                ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
-                                    Text("\(b)").tag(b)
+                        HStack {
+                            Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
+                                ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
+                                    Text(CctvCalcConstants.resolutions[r]).tag(r)
                                 }
                             }
                             .pickerStyle(MenuPickerStyle())
+                            .onChange(of: t2Rows[idx].resIdx) { newRes in
+                                if idx < t2Rows.count {
+                                    t2Rows[idx].bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: newRes, compIdx: t2Rows[idx].compIdx)
+                                }
+                            }
+
+                            Spacer()
+
+                            Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
+                                ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
+                                    Text(CctvCalcConstants.compressions[c]).tag(c)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            .onChange(of: t2Rows[idx].compIdx) { newComp in
+                                if idx < t2Rows.count {
+                                    t2Rows[idx].bitrate = CctvCalcConstants.defaultStorageBitrate(resIdx: t2Rows[idx].resIdx, compIdx: newComp)
+                                }
+                            }
                         }
 
-                        HStack(spacing: 4) {
-                            Text("Số cam:")
-                                .font(.caption)
-                            TextField("1", value: $t2Rows[idx].qty, formatter: NumberFormatter())
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .frame(width: 50)
+                        HStack(spacing: 14) {
+                            HStack(spacing: 4) {
+                                Text("Kbps:")
+                                    .font(.caption)
+                                Picker("", selection: $t2Rows[idx].bitrate) {
+                                    ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
+                                        Text("\(b)").tag(b)
+                                    }
+                                }
+                                .pickerStyle(MenuPickerStyle())
+                            }
+
+                            HStack(spacing: 4) {
+                                Text("Số cam:")
+                                    .font(.caption)
+                                NumberIntField(title: "1", value: $t2Rows[idx].qty, width: 50)
+                            }
                         }
                     }
+                    .padding(12)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
                 }
-                .padding(12)
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                .padding(.horizontal)
             }
 
             Button(action: {
@@ -5823,6 +5843,54 @@ struct DiskStorageCalculatorView: View {
         }
     }
 
+    private func getUsableRaidGB(type: Int, drives: Int, diskSizeGB: Double) -> Double {
+        switch type {
+        case 0: return Double(drives) * diskSizeGB
+        case 1: return Double(drives / 2) * diskSizeGB
+        case 5: return Double(max(0, drives - 1)) * diskSizeGB
+        case 6: return Double(max(0, drives - 2)) * diskSizeGB
+        case 10: return Double(drives / 2) * diskSizeGB
+        default: return 0
+        }
+    }
+
+    private func calculateRaidResult(diskTB: Double, dailyGB: Double, minDrives: Int) -> (drives: Int, days: Double, usableTB: Double, error: String?) {
+        let diskSizeGB = diskTB * 1000.0 * 0.931
+        let isEvenReq = (raidType == 1 || raidType == 10)
+
+        if raidMode == 0 {
+            let drives = max(1, Int(dynamicValue) ?? 4)
+            if drives < minDrives {
+                return (drives, 0, 0, "Yêu cầu tối thiểu \(minDrives) ổ cứng cho loại RAID này.")
+            }
+            if isEvenReq && (drives % 2 != 0) {
+                return (drives, 0, 0, "Loại RAID này yêu cầu số ổ cứng phải là số chẵn.")
+            }
+            let usableGB = getUsableRaidGB(type: raidType, drives: drives, diskSizeGB: diskSizeGB)
+            let days = dailyGB > 0 ? (usableGB / dailyGB) : 0
+            return (drives, days, usableGB / 1024.0, nil)
+        } else {
+            let targetDays = max(1.0, Double(dynamicValue) ?? 30.0)
+            let requiredGB = dailyGB * targetDays
+            var foundDrives = 0
+            for d in minDrives...64 {
+                if isEvenReq && (d % 2 != 0) { continue }
+                let usable = getUsableRaidGB(type: raidType, drives: d, diskSizeGB: diskSizeGB)
+                if usable >= requiredGB {
+                    foundDrives = d
+                    break
+                }
+            }
+            if foundDrives > 0 {
+                let usableGB = getUsableRaidGB(type: raidType, drives: foundDrives, diskSizeGB: diskSizeGB)
+                let actualDays = dailyGB > 0 ? (usableGB / dailyGB) : 0
+                return (foundDrives, actualDays, usableGB / 1024.0, nil)
+            } else {
+                return (0, 0, 0, "Không tìm thấy số ổ phù hợp (thử tăng dung lượng ổ hoặc giảm số ngày).")
+            }
+        }
+    }
+
     private var tab3RaidView: some View {
         VStack(spacing: 14) {
             Text("Tính toán dung lượng và số lượng ổ cứng theo cụm RAID")
@@ -5885,113 +5953,59 @@ struct DiskStorageCalculatorView: View {
             .padding(.horizontal)
 
             let diskTB = max(0.5, Double(diskSizeTB.replacingOccurrences(of: ",", with: ".")) ?? 4.0)
-            let diskSizeGB = diskTB * 1000.0 * 0.931
             let dailyGB = raidRows.reduce(0.0) { sum, r in
                 sum + (Double(max(1, r.qty) * r.bitrate * 86400) / (8.0 * 1024.0 * 1024.0))
             }
             let minDrives: Int = (raidType == 5 ? 3 : (raidType == 6 || raidType == 10 ? 4 : 2))
 
-            if raidMode == 0 {
-                let drives = Int(dynamicValue) ?? 4
-                let isEvenReq = (raidType == 1 || raidType == 10)
-                if drives < minDrives {
-                    Text("⚠️ Yêu cầu tối thiểu \(minDrives) ổ cứng cho loại RAID này.")
-                        .font(.caption.bold())
-                        .foregroundColor(.red)
-                        .padding(.horizontal)
-                } else if isEvenReq && (drives % 2 != 0) {
-                    Text("⚠️ Loại RAID này yêu cầu số ổ cứng phải là số chẵn.")
-                        .font(.caption.bold())
-                        .foregroundColor(.red)
-                        .padding(.horizontal)
-                } else {
-                    let usableGB: Double = {
-                        switch raidType {
-                        case 0: return Double(drives) * diskSizeGB
-                        case 1: return Double(drives / 2) * diskSizeGB
-                        case 5: return Double(drives - 1) * diskSizeGB
-                        case 6: return Double(drives - 2) * diskSizeGB
-                        case 10: return Double(drives / 2) * diskSizeGB
-                        default: return 0
-                        }
-                    }()
-                    let days = dailyGB > 0 ? (usableGB / dailyGB) : 0
-                    let daysInt = Int(floor(days))
-                    let hours = (days - Double(daysInt)) * 24.0
+            let res = calculateRaidResult(diskTB: diskTB, dailyGB: dailyGB, minDrives: minDrives)
 
-                    VStack(spacing: 8) {
-                        Text("LƯU ĐƯỢC TỐI ĐA")
-                            .font(.caption.weight(.bold))
-                            .foregroundColor(.secondary)
-                        Text("\(daysInt) ngày \(String(format: "%.1f", hours)) giờ")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundColor(.red)
-                        Text("Dung lượng khả dụng cụm RAID: \(CctvCalcConstants.fmtNumber(usableGB / 1024.0)) TB\n(Cần: \(CctvCalcConstants.fmtNumber(dailyGB)) GB/ngày)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.orange.opacity(0.12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
-                    .cornerRadius(12)
+            if let err = res.error {
+                Text("⚠️ " + err)
+                    .font(.caption.bold())
+                    .foregroundColor(.red)
                     .padding(.horizontal)
+            } else if raidMode == 0 {
+                let daysInt = Int(floor(res.days))
+                let hours = (res.days - Double(daysInt)) * 24.0
+
+                VStack(spacing: 8) {
+                    Text("LƯU ĐƯỢC TỐI ĐA")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(daysInt) ngày \(String(format: "%.1f", hours)) giờ")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("Dung lượng khả dụng cụm RAID: \(CctvCalcConstants.fmtNumber(res.usableTB)) TB\n(Cần: \(CctvCalcConstants.fmtNumber(dailyGB)) GB/ngày)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
             } else {
-                let targetDays = max(1.0, Double(dynamicValue) ?? 30.0)
-                let requiredGB = dailyGB * targetDays
-                var foundDrives = 0
-                for d in minDrives...64 {
-                    if (raidType == 1 || raidType == 10) && (d % 2 != 0) { continue }
-                    let usable: Double = {
-                        switch raidType {
-                        case 0: return Double(d) * diskSizeGB
-                        case 1: return Double(d / 2) * diskSizeGB
-                        case 5: return Double(d - 1) * diskSizeGB
-                        case 6: return Double(d - 2) * diskSizeGB
-                        case 10: return Double(d / 2) * diskSizeGB
-                        default: return 0
-                        }
-                    }()
-                    if usable >= requiredGB {
-                        foundDrives = d
-                        break
-                    }
+                VStack(spacing: 8) {
+                    Text("SỐ Ổ CỨNG CẦN DÙNG")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(.secondary)
+                    Text("\(res.drives) ổ cứng (\(diskTB) TB/ổ)")
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundColor(.red)
+                    Text("Đáp ứng lưu tối thiểu: \(Int(floor(res.days))) ngày\nDung lượng khả dụng: \(CctvCalcConstants.fmtNumber(res.usableTB)) TB")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
-
-                if foundDrives > 0 {
-                    let actualUsable: Double = {
-                        switch raidType {
-                        case 0: return Double(foundDrives) * diskSizeGB
-                        case 1: return Double(foundDrives / 2) * diskSizeGB
-                        case 5: return Double(foundDrives - 1) * diskSizeGB
-                        case 6: return Double(foundDrives - 2) * diskSizeGB
-                        case 10: return Double(foundDrives / 2) * diskSizeGB
-                        default: return 0
-                        }
-                    }()
-                    let actualDays = dailyGB > 0 ? (actualUsable / dailyGB) : 0
-
-                    VStack(spacing: 8) {
-                        Text("SỐ Ổ CỨNG CẦN DÙNG")
-                            .font(.caption.weight(.bold))
-                            .foregroundColor(.secondary)
-                        Text("\(foundDrives) ổ cứng (\(diskTB) TB/ổ)")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundColor(.red)
-                        Text("Đáp ứng lưu tối thiểu: \(Int(floor(actualDays))) ngày\nDung lượng khả dụng: \(CctvCalcConstants.fmtNumber(actualUsable / 1024.0)) TB")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.orange.opacity(0.12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
-                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange.opacity(0.12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.35), lineWidth: 1))
+                .cornerRadius(12)
+                .padding(.horizontal)
             }
         }
     }
@@ -6082,8 +6096,8 @@ struct Data4GCalculatorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: t1ResIdx) { _ in
-                        t1Bitrate = CctvCalcConstants.default4GBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    .onChange(of: t1ResIdx) { newRes in
+                        t1Bitrate = CctvCalcConstants.default4GBitrate(resIdx: newRes, compIdx: t1CompIdx)
                     }
                 }
 
@@ -6097,8 +6111,8 @@ struct Data4GCalculatorView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: t1CompIdx) { _ in
-                        t1Bitrate = CctvCalcConstants.default4GBitrate(resIdx: t1ResIdx, compIdx: t1CompIdx)
+                    .onChange(of: t1CompIdx) { newComp in
+                        t1Bitrate = CctvCalcConstants.default4GBitrate(resIdx: t1ResIdx, compIdx: newComp)
                     }
                 }
 
@@ -6280,74 +6294,81 @@ struct Data4GCalculatorView: View {
                 .padding(.horizontal)
             }
 
-            ForEach(t2Rows.indices, id: \.self) { idx in
-                VStack(spacing: 8) {
-                    HStack {
-                        Text("#\(idx + 1)")
-                            .font(.caption.bold())
-                            .foregroundColor(.orange)
-                        TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                        Spacer()
-                        if t2Rows.count > 1 {
-                            Button(action: { t2Rows.remove(at: idx) }) {
-                                Image(systemName: "trash.fill")
-                                    .foregroundColor(.red)
-                                    .font(.caption)
+            ForEach(0..<t2Rows.count, id: \.self) { idx in
+                if idx < t2Rows.count {
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("#\(idx + 1)")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                            TextField("Tên camera/nhóm", text: $t2Rows[idx].name)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            Spacer()
+                            if t2Rows.count > 1 {
+                                Button(action: {
+                                    if idx < t2Rows.count {
+                                        t2Rows.remove(at: idx)
+                                    }
+                                }) {
+                                    Image(systemName: "trash.fill")
+                                        .foregroundColor(.red)
+                                        .font(.caption)
+                                }
                             }
                         }
-                    }
 
-                    HStack {
-                        Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
-                            ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
-                                Text(CctvCalcConstants.resolutions[r]).tag(r)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: t2Rows[idx].resIdx) { _ in
-                            t2Rows[idx].bitrate = CctvCalcConstants.default4GBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
-                        }
-
-                        Spacer()
-
-                        Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
-                            ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
-                                Text(CctvCalcConstants.compressions[c]).tag(c)
-                            }
-                        }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: t2Rows[idx].compIdx) { _ in
-                            t2Rows[idx].bitrate = CctvCalcConstants.default4GBitrate(resIdx: t2Rows[idx].resIdx, compIdx: t2Rows[idx].compIdx)
-                        }
-                    }
-
-                    HStack(spacing: 14) {
-                        HStack(spacing: 4) {
-                            Text("Kbps:")
-                                .font(.caption)
-                            Picker("", selection: $t2Rows[idx].bitrate) {
-                                ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
-                                    Text("\(b)").tag(b)
+                        HStack {
+                            Picker("Độ phân giải", selection: $t2Rows[idx].resIdx) {
+                                ForEach(0..<CctvCalcConstants.resolutions.count, id: \.self) { r in
+                                    Text(CctvCalcConstants.resolutions[r]).tag(r)
                                 }
                             }
                             .pickerStyle(MenuPickerStyle())
+                            .onChange(of: t2Rows[idx].resIdx) { newRes in
+                                if idx < t2Rows.count {
+                                    t2Rows[idx].bitrate = CctvCalcConstants.default4GBitrate(resIdx: newRes, compIdx: t2Rows[idx].compIdx)
+                                }
+                            }
+
+                            Spacer()
+
+                            Picker("Chuẩn nén", selection: $t2Rows[idx].compIdx) {
+                                ForEach(0..<CctvCalcConstants.compressions.count, id: \.self) { c in
+                                    Text(CctvCalcConstants.compressions[c]).tag(c)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            .onChange(of: t2Rows[idx].compIdx) { newComp in
+                                if idx < t2Rows.count {
+                                    t2Rows[idx].bitrate = CctvCalcConstants.default4GBitrate(resIdx: t2Rows[idx].resIdx, compIdx: newComp)
+                                }
+                            }
                         }
 
-                        HStack(spacing: 4) {
-                            Text("Số cam:")
-                                .font(.caption)
-                            TextField("1", value: $t2Rows[idx].qty, formatter: NumberFormatter())
-                                .keyboardType(.numberPad)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .frame(width: 50)
+                        HStack(spacing: 14) {
+                            HStack(spacing: 4) {
+                                Text("Kbps:")
+                                    .font(.caption)
+                                Picker("", selection: $t2Rows[idx].bitrate) {
+                                    ForEach(CctvCalcConstants.bitrateList, id: \.self) { b in
+                                        Text("\(b)").tag(b)
+                                    }
+                                }
+                                .pickerStyle(MenuPickerStyle())
+                            }
+
+                            HStack(spacing: 4) {
+                                Text("Số cam:")
+                                    .font(.caption)
+                                NumberIntField(title: "1", value: $t2Rows[idx].qty, width: 50)
+                            }
                         }
                     }
+                    .padding(12)
+                    .background(Color(UIColor.secondarySystemBackground))
+                    .cornerRadius(10)
+                    .padding(.horizontal)
                 }
-                .padding(12)
-                .background(Color(UIColor.secondarySystemBackground))
-                .cornerRadius(10)
-                .padding(.horizontal)
             }
 
             Button(action: {
