@@ -3161,15 +3161,30 @@ struct ContentView: View {
 
     private func executeReboot() {
         isLoading = true
-        setStatus("Đang gửi lệnh Reboot camera \(ip)...", type: .info)
-        cgiClient.rebootDevice(ip: ip, port: port, user: camUser, pass: camPass) { result in
+        let cleanIp = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPort = port.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "80" : port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUser = camUser.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanIp.isEmpty || cleanUser.isEmpty {
+            setStatus("Vui lòng nhập IP và tài khoản camera!", type: .error)
+            isLoading = false
+            return
+        }
+
+        setStatus("Đang gửi lệnh Reboot camera \(cleanIp)...", type: .info)
+        cgiClient.rebootDevice(ip: cleanIp, port: cleanPort, user: cleanUser, pass: camPass) { result in
             DispatchQueue.main.async {
                 self.isLoading = false
-                if result.success {
-                    self.setStatus("Đã gửi lệnh khởi động lại camera \(self.ip) thành công!", type: .success)
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true") || result.statusCode == 200) {
+                    let okMsg = "Đã gửi lệnh khởi động lại (Reboot) camera \(cleanIp) thành công! 🔄"
+                    self.setStatus(okMsg, type: .success)
+                    self.appendLog(okMsg)
                     self.activeModalType = nil
                 } else {
-                    self.setStatus("Reboot thất bại: HTTP \(result.statusCode)", type: .error)
+                    let msg = result.errorMessage ?? ""
+                    let errMsg = "Reboot thất bại: HTTP \(result.statusCode)\(msg.isEmpty ? "" : " (\(msg))")"
+                    self.setStatus(errMsg, type: .error)
+                    self.appendLog(errMsg)
                 }
             }
         }
@@ -3955,17 +3970,19 @@ struct ContentView: View {
             pass: camPass
         ) { result in
             DispatchQueue.main.async {
-                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true")) {
+                if result.success && (result.rawText.contains("OK") || result.rawText.contains("true") || result.statusCode == 200) {
                     self.setStatus("Đã đổi IP thành công sang \(cleanNewIp)! 🎉", type: .success)
-                    self.appendLog("Đã đổi IP từ \(cleanIp) sang \(cleanNewIp). Camera sẽ nhận IP mới!")
+                    self.appendLog("Đã đổi IP từ \(cleanIp) sang \(cleanNewIp). Camera đang áp dụng IP mới!")
                     self.ip = cleanNewIp
                     self.activeModalType = nil
                 } else if result.success {
                     self.setStatus("Phản hồi camera: \(result.rawText.trimmingCharacters(in: .whitespacesAndNewlines))", type: .success)
+                    self.appendLog("Phản hồi camera: \(result.rawText.trimmingCharacters(in: .whitespacesAndNewlines))")
                     self.ip = cleanNewIp
                     self.activeModalType = nil
                 } else {
-                    let err = "Lỗi đổi IP: HTTP \(result.statusCode) (\(result.errorMessage ?? ""))"
+                    let msg = result.errorMessage ?? ""
+                    let err = "Lỗi đổi IP: HTTP \(result.statusCode)\(msg.isEmpty ? "" : " (\(msg))")"
                     self.setStatus(err, type: .error)
                     self.appendLog(err)
                 }

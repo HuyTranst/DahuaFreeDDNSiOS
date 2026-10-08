@@ -129,7 +129,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DahuaFreeDDNSiOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DahuaFreeDDNS;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -149,7 +149,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DahuaFreeDDNSiOS/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = DahuaFreeDDNS;
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
