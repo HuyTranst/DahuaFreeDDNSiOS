@@ -474,6 +474,9 @@ struct ContentView: View {
     @State private var logHistory: String = "Ứng dụng Dahua & Imou Manager iOS đã sẵn sàng.\n"
     @State private var rawFetchedConfig: String = ""
 
+    // Shimmer Banner Animation
+    @State private var bannerShimmerOffset: CGFloat = -1.0
+
     private let cgiClient = DahuaCgiClient()
     private let warrantyClient = DahuaWarrantyClient()
 
@@ -1103,48 +1106,78 @@ struct ContentView: View {
     var trangChuView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                // Compact Home Banner (~50% height reduction)
-                ZStack {
-                    LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.9), Color.orange]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .cornerRadius(12)
+                // Compact Home Banner (~50% height reduction) with sleek metallic shine animation
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.yellow)
 
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 5) {
                             Text("Công cụ hổ trợ Dahua & Imou")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
-
-                            Button(action: {
-                                if let url = URL(string: "https://zalo.me/0909080119") {
-                                    UIApplication.shared.open(url)
-                                }
-                            }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "phone.fill")
-                                        .font(.system(size: 11))
-                                    Text("Zalo :0909.080.119")
-                                        .font(.caption)
-                                        .bold()
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(Color.white)
-                                .foregroundColor(.orange)
-                                .cornerRadius(12)
-                            }
                         }
-                        Spacer()
 
-                        CameraLogoIcon(brand: .imou)
-                            .frame(width: 44, height: 44)
+                        Button(action: {
+                            if let url = URL(string: "https://zalo.me/0909080119") {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "phone.fill")
+                                    .font(.system(size: 11))
+                                Text("Zalo :0909.080.119")
+                                    .font(.caption)
+                                    .bold()
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
                             .background(Color.white)
-                            .cornerRadius(10)
-                            .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+                            .foregroundColor(.orange)
+                            .cornerRadius(12)
+                            .shadow(color: Color.black.opacity(0.08), radius: 2, y: 1)
+                        }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    Spacer()
+
+                    CameraLogoIcon(brand: .imou)
+                        .frame(width: 44, height: 44)
+                        .background(Color.white)
+                        .cornerRadius(10)
+                        .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(gradient: Gradient(colors: [Color.orange.opacity(0.95), Color.orange]), startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+                .overlay(
+                    // Metallic shimmer beam running smoothly from left to right inside banner
+                    GeometryReader { geo in
+                        let width = geo.size.width
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.white.opacity(0.0),
+                                        Color.white.opacity(0.28),
+                                        Color.white.opacity(0.0)
+                                    ]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: 55)
+                            .rotationEffect(.degrees(22))
+                            .offset(x: bannerShimmerOffset * (width + 120))
+                    }
+                    .allowsHitTesting(false)
+                )
+                .cornerRadius(12)
+                .clipped()
                 .padding(.horizontal)
 
                 // Quick Action Cards
@@ -1353,6 +1386,11 @@ struct ContentView: View {
                 }
             }
             .padding(.vertical)
+        }
+        .onAppear {
+            withAnimation(Animation.linear(duration: 3.2).repeatForever(autoreverses: false)) {
+                bannerShimmerOffset = 1.2
+            }
         }
     }
 
