@@ -590,6 +590,7 @@ struct ContentView: View {
         case calcStorage
         case calcBandwidth
         case calcData4G
+        case productInfo
 
         var id: String {
             switch self {
@@ -605,6 +606,7 @@ struct ContentView: View {
             case .calcStorage: return "calcStorage"
             case .calcBandwidth: return "calcBandwidth"
             case .calcData4G: return "calcData4G"
+            case .productInfo: return "productInfo"
             }
         }
     }
@@ -902,6 +904,17 @@ struct ContentView: View {
                             }
                         }
                 }
+            case .productInfo:
+                NavigationView {
+                    sanPhamView
+                        .navigationTitle("Thông Tin Sản Phẩm")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
             }
         }
     }
@@ -910,9 +923,51 @@ struct ContentView: View {
     var cctvToolsMenu: some View {
         Menu {
             Button(action: {
+                self.selectedTab = 3
+            }) {
+                Label("1. Cấu Hình DDNS Free", systemImage: "gearshape.2.fill")
+            }
+
+            Button(action: {
+                self.selectedTab = 1
+            }) {
+                Label("2. Check Port", systemImage: "antenna.radiowaves.left.and.right")
+            }
+
+            Button(action: {
+                self.activeModalType = .superPassword
+            }) {
+                Label("3. Super password", systemImage: "lock.shield.fill")
+            }
+
+            Button(action: {
+                self.activeModalType = .rtspOnvif
+            }) {
+                Label("4. Tạo Link RTSP & Onvip", systemImage: "video.fill")
+            }
+
+            Button(action: {
+                self.openQrCodeModal(for: nil)
+            }) {
+                Label("5. Tạo QR S/N", systemImage: "qrcode")
+            }
+
+            Button(action: {
+                self.selectedTab = 2
+            }) {
+                Label("6. Kiểm Tra Bảo Hành SP", systemImage: "qrcode.viewfinder")
+            }
+
+            Button(action: {
                 self.activeModalType = .calcStorage
             }) {
-                Label("Tính Lưu Trữ , Băng Thông , 4G", systemImage: "function")
+                Label("7. Tính Lưu Trữ , Băng Thông , 4G", systemImage: "function")
+            }
+
+            Button(action: {
+                self.activeModalType = .productInfo
+            }) {
+                Label("8. Thông Tin Sản Phẩm", systemImage: "info.circle.fill")
             }
         } label: {
             Image(systemName: "line.3.horizontal")
@@ -1175,39 +1230,6 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Compact Home Banner with eye-catching animation and 100% fixed height
                 HomeBannerView()
-
-                // Quick Action Cards
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Tính Năng Nổi Bật & Tiện Ích")
-                        .font(.headline)
-                        .padding(.horizontal)
-
-                    HStack(spacing: 12) {
-                        QuickTile(title: "Check Bảo Hành", icon: "qrcode.viewfinder", color: .orange) {
-                            selectedTab = 2
-                        }
-                        QuickTile(title: "Cấu Hình DDNS", icon: "gearshape.2.fill", color: .blue) {
-                            selectedTab = 3
-                        }
-                        QuickTile(title: "RTSP & Onvif", icon: "video.fill", color: .orange) {
-                            self.activeModalType = .rtspOnvif
-                        }
-                    }
-                    .padding(.horizontal)
-
-                    HStack(spacing: 12) {
-                        QuickTile(title: "Check Port", icon: "antenna.radiowaves.left.and.right", color: .purple) {
-                            selectedTab = 1
-                        }
-                        QuickTile(title: "Super Pass", icon: "lock.shield.fill", color: .red) {
-                            self.activeModalType = .superPassword
-                        }
-                        QuickTile(title: "Tạo QR S/N", icon: "qrcode", color: .orange) {
-                            self.openQrCodeModal(for: nil)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
 
                 // Network Control & Realtime Status Bar
                 VStack(spacing: 8) {
