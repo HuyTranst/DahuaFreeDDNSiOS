@@ -21,6 +21,7 @@ jobs:
           echo "Using iOS SDK at: $SDK_PATH"
 
           echo "=== Compiling with Swiftc (Release Mode) ==="
+          set -o pipefail
           swiftc -target arm64-apple-ios15.0 \
                  -sdk "$SDK_PATH" \
                  -parse-as-library \
@@ -41,7 +42,8 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
           if [ ! -f DahuaFreeDDNS ]; then
-            echo "Binary was not created. Stopping."
+            echo "::error::Swift compilation failed. See logs above."
+            cat compile.log
             exit 1
           fi
 
