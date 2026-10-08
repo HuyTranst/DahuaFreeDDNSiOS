@@ -1171,7 +1171,7 @@ struct ContentView: View {
                             HStack {
                                 Image(systemName: "checklist")
                                     .foregroundColor(.orange)
-                                Text("Danh Sách Camera LAN (\(scanner.discoveredDevices.filter { !$0.sn.isEmpty }.count) thiết bị):")
+                                Text("Danh Sách Camera LAN:")
                                     .font(.subheadline.weight(.bold))
                                     .foregroundColor(.primary)
                             }
@@ -1228,8 +1228,8 @@ struct ContentView: View {
                                                             .foregroundColor(.primary)
                                                     }
 
-                                                    if !dev.deviceType.isEmpty {
-                                                        Text("Model: \(dev.deviceType)")
+                                                    if !dev.machineName.isEmpty {
+                                                        Text("Model: \(dev.machineName)")
                                                             .font(.caption2)
                                                             .foregroundColor(.gray)
                                                     }
