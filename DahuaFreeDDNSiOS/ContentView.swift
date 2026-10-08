@@ -72,7 +72,7 @@ class DahuaWarrantyClient {
         var results: [WarrantyResultItem] = []
         let lock = NSLock()
 
-        // 1. Query DSS Vietnam API (https://app.dahua.vn:7778/Api.svc/Web/TraCuuBaoHanhTheoSeria?seria=...)
+        // 1. Query DSS Vietnam API (Dahua Việt Nam)
         group.enter()
         queryDSS(sn: cleanSn) { dssResults in
             lock.lock()
@@ -81,7 +81,25 @@ class DahuaWarrantyClient {
             group.leave()
         }
 
-        // 2. Query Dahua Global Support API (https://supportapi.dahuasecurity.com/support/api/doc/docOverseasProduct/selectInfoBtSN?serialNumber=...)
+        // 2. Query KBT / Kabe Group (KBVISION)
+        group.enter()
+        queryKbt(sn: cleanSn) { kbtResults in
+            lock.lock()
+            results.append(contentsOf: kbtResults)
+            lock.unlock()
+            group.leave()
+        }
+
+        // 3. Query VINAGO Co., Ltd (Dahua/Imou)
+        group.enter()
+        queryVinago(sn: cleanSn) { vinagoResults in
+            lock.lock()
+            results.append(contentsOf: vinagoResults)
+            lock.unlock()
+            group.leave()
+        }
+
+        // 4. Query Dahua Global Support API (Chính Hãng International)
         group.enter()
         queryDahuaGlobal(sn: cleanSn) { globalResults in
             lock.lock()
@@ -222,6 +240,153 @@ class DahuaWarrantyClient {
                 }
             } catch {
                 print("Dahua Global Parse Error: \(error)")
+            }
+            completion([])
+        }
+        task.resume()
+    }
+
+    private func queryKbt(sn: String, completion: @escaping ([WarrantyResultItem]) -> Void) {
+        guard let url = URL(string: "https://kabegroup.vn/kabet/online/") else {
+            completion([])
+            return
+        }
+
+        var getReq = URLRequest(url: url)
+        getReq.httpMethod = "GET"
+        getReq.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        getReq.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        getReq.timeoutInterval = 8.0
+
+        let task1 = session.dataTask(with: getReq) { [weak self] data, response, error in
+            guard let self = self, let data = data, let html1 = String(data: data, encoding: .utf8), error == nil else {
+                completion([])
+                return
+            }
+
+            var token = ""
+            if let tokenRegex = try? NSRegularExpression(pattern: "name=[\"']_token[\"']\\s+value=[\"']([^\"']+)[\"']", options: .caseInsensitive) {
+                let nsHtml = html1 as NSString
+                let range = NSRange(location: 0, length: nsHtml.length)
+                if let match = tokenRegex.firstMatch(in: html1, options: [], range: range) {
+                    token = nsHtml.substring(with: match.range(at: 1))
+                }
+            }
+
+            guard !token.isEmpty else {
+                completion([])
+                return
+            }
+
+            var postReq = URLRequest(url: url)
+            postReq.httpMethod = "POST"
+            postReq.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+            postReq.setValue("https://kabegroup.vn/kabet/online/", forHTTPHeaderField: "Referer")
+            postReq.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            postReq.timeoutInterval = 8.0
+
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+            let escapedToken = token.addingPercentEncoding(withAllowedCharacters: allowed) ?? token
+            let escapedSn = sn.addingPercentEncoding(withAllowedCharacters: allowed) ?? sn
+            let bodyStr = "_token=\(escapedToken)&txtSN=\(escapedSn)"
+            postReq.httpBody = bodyStr.data(using: .utf8)
+
+            let task2 = self.session.dataTask(with: postReq) { data2, response2, error2 in
+                guard let data2 = data2, let html2 = String(data: data2, encoding: .utf8), error2 == nil else {
+                    completion([])
+                    return
+                }
+
+                let lowerHtml = html2.lowercased()
+                if !lowerHtml.contains("không tìm thấy") && !lowerHtml.contains("khong tim thay") && (lowerHtml.contains("bảo hành") || lowerHtml.contains("serial") || lowerHtml.contains(sn.lowercased())) {
+                    var expireVal = "Còn hạn bảo hành"
+                    if let dateRegex = try? NSRegularExpression(pattern: "(\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2})", options: []) {
+                        let nsHtml2 = html2 as NSString
+                        let range2 = NSRange(location: 0, length: nsHtml2.length)
+                        if let dateMatch = dateRegex.firstMatch(in: html2, options: [], range: range2) {
+                            expireVal = nsHtml2.substring(with: dateMatch.range(at: 1))
+                        }
+                    }
+
+                    let item = WarrantyResultItem(
+                        supplier: "KBT / KABE T DISTRIBUTION (KBVISION)",
+                        productCode: "Thiết bị KBVISION / KBT",
+                        productName: "Camera / Đầu ghi KBVISION",
+                        serialNumber: sn,
+                        exportDate: "--",
+                        warrantyMonths: "--",
+                        expireDate: expireVal,
+                        remainingDays: nil,
+                        dealer: "KBT / KBVISION Group",
+                        warehouse: "Kho KBT Việt Nam",
+                        isValid: true,
+                        isProductOnly: false
+                    )
+                    completion([item])
+                    return
+                }
+                completion([])
+            }
+            task2.resume()
+        }
+        task1.resume()
+    }
+
+    private func queryVinago(sn: String, completion: @escaping ([WarrantyResultItem]) -> Void) {
+        guard let url = URL(string: "https://baohanh.vinagoco.vn/?code=\(sn)") else {
+            completion([])
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 8.0
+
+        let task = session.dataTask(with: request) { data, response, error in
+            guard let data = data, let html = String(data: data, encoding: .utf8), error == nil else {
+                completion([])
+                return
+            }
+
+            let lowerHtml = html.lowercased()
+            if lowerHtml.contains(sn.lowercased()) && !lowerHtml.contains("không tìm thấy") && !lowerHtml.contains("khong tim thay") {
+                var modelVal = ""
+                if let modelRegex = try? NSRegularExpression(pattern: "Model\\s*[:\\s]+([^\\r\\n<]+)", options: .caseInsensitive) {
+                    let nsHtml = html as NSString
+                    let range = NSRange(location: 0, length: nsHtml.length)
+                    if let match = modelRegex.firstMatch(in: html, options: [], range: range) {
+                        modelVal = nsHtml.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+
+                var expireVal = ""
+                if let dateRegex = try? NSRegularExpression(pattern: "(\\d{4}-\\d{2}-\\d{2}|\\d{2}/\\d{2}/\\d{4})", options: []) {
+                    let nsHtml = html as NSString
+                    let range = NSRange(location: 0, length: nsHtml.length)
+                    if let match = dateRegex.firstMatch(in: html, options: [], range: range) {
+                        expireVal = nsHtml.substring(with: match.range(at: 1))
+                    }
+                }
+
+                if !modelVal.isEmpty || !expireVal.isEmpty {
+                    let item = WarrantyResultItem(
+                        supplier: "VINAGO CO., LTD (Phân Phối Dahua/Imou)",
+                        productCode: modelVal.isEmpty ? "Thiết bị Vinago" : modelVal,
+                        productName: "Thiết bị phân phối Vinago",
+                        serialNumber: sn,
+                        exportDate: "--",
+                        warrantyMonths: "--",
+                        expireDate: expireVal.isEmpty ? "Còn hạn bảo hành" : expireVal,
+                        remainingDays: nil,
+                        dealer: "VINAGO Co., Ltd",
+                        warehouse: "Kho Vinago",
+                        isValid: true,
+                        isProductOnly: false
+                    )
+                    completion([item])
+                    return
+                }
             }
             completion([])
         }
@@ -704,7 +869,7 @@ struct ContentView: View {
                                 .bold()
                                 .foregroundColor(.white)
 
-                            Text("Quét mã Barcode / QR Code S/N hoặc nhập để kiểm tra trực tiếp qua API DSS Việt Nam & Dahua Global.")
+                            Text("Quét mã Barcode / QR Code S/N hoặc nhập để kiểm tra trực tiếp qua API 4 nhà phân phối: DSS, KBT (Kabe), Vinago & Dahua Global.")
                                 .font(.caption)
                                 .foregroundColor(.white.opacity(0.9))
                         }
@@ -793,7 +958,7 @@ struct ContentView: View {
                     HStack {
                         Spacer()
                         ProgressView().padding(.trailing, 8)
-                        Text("Đang tra cứu dữ liệu bảo hành API...")
+                        Text("Đang tra cứu đồng thời cả 4 nhà phân phối (DSS, KBT, Vinago, Dahua Global)...")
                             .font(.subheadline)
                             .foregroundColor(.orange)
                         Spacer()
@@ -826,8 +991,9 @@ struct ContentView: View {
                                     .font(.subheadline)
                                     .multilineTextAlignment(.center)
                                     .foregroundColor(.secondary)
-                                Text("Có thể camera chưa kích hoạt bảo hành điện tử DSS hoặc thuộc nhà phân phối khác.")
+                                Text("Đã tra cứu đồng thời trên hệ thống DSS, KBT (Kabe), Vinago & Dahua Global. Vui lòng kiểm tra lại số S/N hoặc camera chưa kích hoạt bảo hành điện tử.")
                                     .font(.caption2)
+                                    .multilineTextAlignment(.center)
                                     .foregroundColor(.gray)
                             }
                             .frame(maxWidth: .infinity)
