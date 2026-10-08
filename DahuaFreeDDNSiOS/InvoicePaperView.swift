@@ -420,14 +420,37 @@ struct InvoicePaperView: View {
     }
 }
 
-// MARK: - JPG Image Generator from View (Layout an toàn và scale 2.0 tối ưu bộ nhớ)
+// MARK: - JPG Image Generator from View (Hỗ trợ ImageRenderer iOS 16+ và UIHostingController kèm Window trên iOS 15)
 extension View {
+    @MainActor
     func renderAsImage(targetSize: CGSize = CGSize(width: 390, height: 693.3)) -> UIImage? {
+        // 1. Đối với iOS 16+, dùng ImageRenderer (Chính chủ Apple, xuất ảnh sắc nét 100%, không bao giờ bị trắng)
+        if #available(iOS 16.0, *) {
+            let wrappedView = self.frame(width: targetSize.width, height: targetSize.height)
+            let renderer = ImageRenderer(content: wrappedView)
+            renderer.proposedSize = ProposedViewSize(targetSize)
+            renderer.scale = 2.0
+            if let img = renderer.uiImage {
+                return img
+            }
+        }
+
+        // 2. Dự phòng chuẩn UIKit (iOS 15): Gắn vào UIWindow tạm thời để hệ thống kích hoạt render layout đầy đủ
         let controller = UIHostingController(rootView: self.edgesIgnoringSafeArea(.all))
         guard let view = controller.view else { return nil }
 
-        view.bounds = CGRect(origin: .zero, size: targetSize)
+        view.frame = CGRect(origin: .zero, size: targetSize)
         view.backgroundColor = .white
+
+        // Tìm keyWindow hiện tại hoặc tạo cửa sổ ảo để view có môi trường render thật
+        let currentWindow = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
+
+        let tempWindow = currentWindow ?? UIWindow(frame: CGRect(origin: .zero, size: targetSize))
+        tempWindow.addSubview(view)
+
         view.setNeedsLayout()
         view.layoutIfNeeded()
 
@@ -436,9 +459,12 @@ extension View {
         format.opaque = true
 
         let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
-        return renderer.image { ctx in
-            view.layer.render(in: ctx.cgContext)
+        let capturedImage = renderer.image { ctx in
+            view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
         }
+
+        view.removeFromSuperview()
+        return capturedImage
     }
 }
 
