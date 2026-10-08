@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Photos
 
 // MARK: - Aspect Ratio Enum for Invoice
 enum InvoiceAspectRatio: String, CaseIterable, Identifiable {
@@ -11,41 +12,89 @@ enum InvoiceAspectRatio: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .ratio9_16:
-            return "Khổ 9:16 (Story / Zalo)"
+            return "Khổ 9:16 (Màn hình điện thoại / Zalo)"
         case .ratio6_19:
-            return "Khổ 6:19 (Dài / Cuộn Bill)"
+            return "Khổ 6:19 (Cuộn dài / Bill siêu thị)"
         }
     }
 
     var shortName: String {
         switch self {
         case .ratio9_16:
-            return "Dạng 9:16"
+            return "Khổ 9:16"
         case .ratio6_19:
-            return "Dạng 6:19"
+            return "Khổ 6:19"
         }
     }
 
-    // Target width & height for export image and preview
-    var paperWidth: CGFloat { 595.0 } // Standard A4 base width
-
-    func paperHeight(itemsCount: Int) -> CGFloat {
+    // Canvas width & height in points
+    // Phone screen standard logic width: 390 pt (iPhone standard)
+    var canvasWidth: CGFloat {
         switch self {
         case .ratio9_16:
-            // 9:16 -> width 595, height = 595 * 16 / 9 ~ 1058
-            let calculated = 595.0 * 16.0 / 9.0
-            let minNeeded: CGFloat = 360.0 + CGFloat(itemsCount * 30)
-            return max(calculated, minNeeded)
+            return 390.0
         case .ratio6_19:
-            // 6:19 -> width 595, height = 595 * 19 / 6 ~ 1884
-            let calculated = 595.0 * 19.0 / 6.0
-            let minNeeded: CGFloat = 400.0 + CGFloat(itemsCount * 34)
-            return max(calculated, minNeeded)
+            return 390.0
+        }
+    }
+
+    func canvasHeight(itemsCount: Int) -> CGFloat {
+        switch self {
+        case .ratio9_16:
+            // 9:16 standard smartphone screen: 390 * 16 / 9 ~ 693.3 pt
+            // If items exceed standard bounds, expand dynamically while maintaining readable spacing
+            let standardHeight = 390.0 * 16.0 / 9.0 // ~693.3
+            let neededHeight: CGFloat = 340.0 + CGFloat(itemsCount * 28)
+            return max(standardHeight, neededHeight)
+        case .ratio6_19:
+            // 6:19 tall bill scroll format: 390 * 19 / 6 = 1235.0 pt
+            let standardHeight = 390.0 * 19.0 / 6.0 // 1235.0
+            let neededHeight: CGFloat = 380.0 + CGFloat(itemsCount * 32)
+            return max(standardHeight, neededHeight)
         }
     }
 }
 
-// MARK: - Invoice Bill View (To Render and Export as Image)
+// MARK: - Photo Library Saver Helper
+class PhotoLibrarySaver: NSObject {
+    static let shared = PhotoLibrarySaver()
+
+    func saveImageToAlbum(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
+        let authStatus = PHPhotoLibrary.authorizationStatus()
+        if authStatus == .authorized || authStatus == .limited {
+            performSave(image, completion: completion)
+        } else if authStatus == .notDetermined {
+            PHPhotoLibrary.requestAuthorization { newStatus in
+                DispatchQueue.main.async {
+                    if newStatus == .authorized || newStatus == .limited {
+                        self.performSave(image, completion: completion)
+                    } else {
+                        completion(false, "Vui lòng cấp quyền truy cập Ảnh trong Cài đặt của iPhone để lưu hóa đơn vào Bộ sưu tập.")
+                    }
+                }
+            }
+        } else {
+            completion(false, "Ứng dụng chưa được cấp quyền lưu ảnh. Vui lòng vào Cài đặt > Quyền riêng tư > Ảnh để cho phép.")
+        }
+    }
+
+    private func performSave(_ image: UIImage, completion: @escaping (Bool, String?) -> Void) {
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.creationRequestForAsset(from: image)
+        }) { success, error in
+            DispatchQueue.main.async {
+                if success {
+                    completion(true, nil)
+                } else {
+                    let errMsg = error?.localizedDescription ?? "Không rõ lỗi khi lưu vào Album Ảnh."
+                    completion(false, errMsg)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Invoice Paper View (Dàn trang chuẩn màn hình điện thoại 390pt)
 struct InvoicePaperView: View {
     let invoice: InvoiceRecord
     let company: CompanyInfo
@@ -57,266 +106,315 @@ struct InvoicePaperView: View {
         return df
     }()
 
+    var is916: Bool { aspectRatio == .ratio9_16 }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header: Company Info & Title
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: aspectRatio == .ratio9_16 ? 3 : 5) {
-                    Text(company.name.isEmpty ? "CÔNG TY GIẢI PHÁP CÔNG NGHỆ QUỐC HUY" : company.name)
-                        .font(.system(size: aspectRatio == .ratio9_16 ? 13 : 14, weight: .bold))
-                        .foregroundColor(.orange)
+            // 1. Header Công Ty
+            VStack(alignment: .leading, spacing: is916 ? 2 : 4) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(company.name.isEmpty ? "CÔNG TY GIẢI PHÁP CÔNG NGHỆ QUỐC HUY" : company.name)
+                            .font(.system(size: is916 ? 11.5 : 13, weight: .bold))
+                            .foregroundColor(.orange)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                    if !company.address.isEmpty {
-                        Text("Địa chỉ: \(company.address)")
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
+                        if !company.address.isEmpty {
+                            Text("Đ/c: \(company.address)")
+                                .font(.system(size: 9.5))
+                                .foregroundColor(.gray)
+                                .lineLimit(2)
+                        }
+
+                        Text("Hotline/Zalo: \(company.phone.isEmpty ? "0909080119" : company.phone)")
+                            .font(.system(size: is916 ? 9.5 : 10.5, weight: .semibold))
+                            .foregroundColor(.primary)
+
+                        if !company.email.isEmpty {
+                            Text("Email: \(company.email)")
+                                .font(.system(size: 9))
+                                .foregroundColor(.gray)
+                        }
                     }
 
-                    Text("Hotline/Zalo: \(company.phone.isEmpty ? "0909080119" : company.phone)")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.primary)
+                    Spacer(minLength: 6)
 
-                    if !company.email.isEmpty {
-                        Text("Email: \(company.email)")
-                            .font(.system(size: 10))
-                            .foregroundColor(.gray)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("ĐƠN VỊ LẮP ĐẶT")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(.orange)
+
+                        Image(systemName: "video.badge.checkmark")
+                            .font(.system(size: is916 ? 20 : 24))
+                            .foregroundColor(.orange)
+                            .padding(.top, 1)
                     }
-
-                    if !company.bankAccount.isEmpty {
-                        Text("Thanh toán: \(company.bankAccount)")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.blue)
-                    }
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("ĐƠN VỊ LẮP ĐẶT")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.orange)
-
-                    Image(systemName: "video.badge.checkmark")
-                        .font(.system(size: aspectRatio == .ratio9_16 ? 24 : 28))
-                        .foregroundColor(.orange)
-                        .padding(.top, 2)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, aspectRatio == .ratio9_16 ? 16 : 22)
+            .padding(.horizontal, is916 ? 12 : 16)
+            .padding(.top, is916 ? 12 : 18)
 
-            Divider()
-                .padding(.horizontal, 20)
-                .padding(.vertical, aspectRatio == .ratio9_16 ? 8 : 12)
+            // Đường gạch cam ngăn cách
+            Rectangle()
+                .fill(Color.orange.opacity(0.8))
+                .frame(height: 1.5)
+                .padding(.horizontal, is916 ? 12 : 16)
+                .padding(.vertical, is916 ? 6 : 10)
 
-            // Title
-            VStack(spacing: 3) {
+            // 2. Tiêu Đề Hóa Đơn
+            VStack(spacing: 2) {
                 Text("HÓA ĐƠN BÁN HÀNG")
-                    .font(.system(size: aspectRatio == .ratio9_16 ? 20 : 22, weight: .heavy))
+                    .font(.system(size: is916 ? 16 : 19, weight: .heavy))
                     .foregroundColor(.orange)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
-                Rectangle()
-                    .fill(Color.orange)
-                    .frame(height: 2)
-                    .padding(.horizontal, 20)
+                Text("Số: \(invoice.invoiceNo)")
+                    .font(.system(size: is916 ? 9.5 : 10.5, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.secondary)
             }
-            .padding(.bottom, aspectRatio == .ratio9_16 ? 8 : 12)
+            .padding(.bottom, is916 ? 6 : 10)
 
-            // Invoice & Customer Info 2-Column Grid
-            HStack(alignment: .top, spacing: 16) {
-                // Left: Thông tin hóa đơn
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Thông tin hóa đơn")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.orange)
-
+            // 3. Thông Tin Khách Hàng & Hóa Đơn
+            if is916 {
+                // Khổ 9:16 trên điện thoại: Xếp dạng thẻ bo góc nhỏ gọn
+                VStack(spacing: 3) {
                     HStack {
-                        Text("Số hóa đơn:").foregroundColor(.secondary).font(.system(size: 10))
-                        Text(invoice.invoiceNo).font(.system(size: 10, weight: .bold))
-                    }
-                    HStack {
-                        Text("Ngày lập:").foregroundColor(.secondary).font(.system(size: 10))
-                        Text(dateFormatter.string(from: invoice.date)).font(.system(size: 10))
-                    }
-                    HStack {
-                        Text("Bảo hành:").foregroundColor(.secondary).font(.system(size: 10))
-                        Text("\(invoice.warrantyMonths) tháng").font(.system(size: 10, weight: .semibold))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // Right: Thông tin khách hàng
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Thông tin khách hàng")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.orange)
-
-                    HStack {
-                        Text("Khách hàng:").foregroundColor(.secondary).font(.system(size: 10))
+                        Text("Khách hàng:")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(.secondary)
                         Text(invoice.customerName.isEmpty ? "Khách vãng lai" : invoice.customerName)
                             .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text("Ngày:")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(.secondary)
+                        Text(dateFormatter.string(from: invoice.date))
+                            .font(.system(size: 9.5, weight: .semibold))
                     }
+
                     HStack {
-                        Text("Điện thoại:").foregroundColor(.secondary).font(.system(size: 10))
+                        Text("Điện thoại:")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(.secondary)
                         Text(invoice.customerPhone.isEmpty ? "—" : invoice.customerPhone)
-                            .font(.system(size: 10))
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Text("Bảo hành:")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(.secondary)
+                        Text("\(invoice.warrantyMonths) tháng")
+                            .font(.system(size: 9.5, weight: .bold))
+                            .foregroundColor(.orange)
                     }
-                    HStack(alignment: .top) {
-                        Text("Địa chỉ:").foregroundColor(.secondary).font(.system(size: 10))
-                        Text(invoice.customerAddress.isEmpty ? "—" : invoice.customerAddress)
-                            .font(.system(size: 10))
+
+                    if !invoice.customerAddress.isEmpty {
+                        HStack(alignment: .top) {
+                            Text("Địa chỉ:")
+                                .font(.system(size: 9.5, weight: .medium))
+                                .foregroundColor(.secondary)
+                            Text(invoice.customerAddress)
+                                .font(.system(size: 9.5))
+                                .lineLimit(2)
+                            Spacer()
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, aspectRatio == .ratio9_16 ? 10 : 14)
+                .padding(8)
+                .background(Color.orange.opacity(0.06))
+                .cornerRadius(6)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+            } else {
+                // Khổ 6:19 dài: 2 Cột thông thoáng
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Thông tin khách hàng")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.orange)
 
-            // Items Table Header
-            HStack(spacing: 0) {
-                Text("STT").frame(width: 30, alignment: .center)
-                Text("Model").frame(width: 105, alignment: .leading)
-                Text("Tên sản phẩm").frame(maxWidth: .infinity, alignment: .leading)
-                Text("ĐVT").frame(width: 36, alignment: .center)
-                Text("SL").frame(width: 32, alignment: .center)
-                Text("Đơn giá").frame(width: 80, alignment: .trailing)
-                Text("Thành tiền").frame(width: 88, alignment: .trailing)
+                        HStack {
+                            Text("Khách:").foregroundColor(.secondary).font(.system(size: 9.5))
+                            Text(invoice.customerName.isEmpty ? "Khách vãng lai" : invoice.customerName)
+                                .font(.system(size: 9.5, weight: .bold))
+                        }
+                        HStack {
+                            Text("SĐT:").foregroundColor(.secondary).font(.system(size: 9.5))
+                            Text(invoice.customerPhone.isEmpty ? "—" : invoice.customerPhone)
+                                .font(.system(size: 9.5))
+                        }
+                        if !invoice.customerAddress.isEmpty {
+                            HStack(alignment: .top) {
+                                Text("Đ/c:").foregroundColor(.secondary).font(.system(size: 9.5))
+                                Text(invoice.customerAddress).font(.system(size: 9.5)).lineLimit(2)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("Thông tin HĐ")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.orange)
+
+                        HStack {
+                            Text("Ngày:").foregroundColor(.secondary).font(.system(size: 9.5))
+                            Text(dateFormatter.string(from: invoice.date)).font(.system(size: 9.5))
+                        }
+                        HStack {
+                            Text("Bảo hành:").foregroundColor(.secondary).font(.system(size: 9.5))
+                            Text("\(invoice.warrantyMonths) tháng").font(.system(size: 9.5, weight: .semibold))
+                        }
+                    }
+                    .frame(width: 130, alignment: .trailing)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
             }
-            .font(.system(size: 9.5, weight: .bold))
+
+            // 4. Bảng Sản Phẩm
+            // Bố cục Header: Dành cho màn hình điện thoại chiều rộng 390pt
+            HStack(spacing: 0) {
+                Text("STT").frame(width: 24, alignment: .center)
+                Text("Tên thiết bị / Model").frame(maxWidth: .infinity, alignment: .leading)
+                Text("SL").frame(width: 28, alignment: .center)
+                Text("Đơn giá").frame(width: 66, alignment: .trailing)
+                Text("Thành tiền").frame(width: 76, alignment: .trailing)
+            }
+            .font(.system(size: is916 ? 8.5 : 9, weight: .bold))
             .foregroundColor(.white)
-            .padding(.vertical, 5)
-            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
+            .padding(.horizontal, is916 ? 10 : 12)
             .background(Color.orange)
 
-            // Table Rows
+            // Dòng Sản Phẩm
             VStack(spacing: 0) {
                 ForEach(0..<invoice.items.count, id: \.self) { index in
                     let item = invoice.items[index]
                     HStack(spacing: 0) {
                         Text("\(index + 1)")
-                            .frame(width: 30, alignment: .center)
-                            .font(.system(size: 9.5))
+                            .frame(width: 24, alignment: .center)
+                            .font(.system(size: 8.5))
 
-                        Text(item.model.isEmpty ? "—" : item.model)
-                            .frame(width: 105, alignment: .leading)
-                            .font(.system(size: 8.5, design: .monospaced))
-                            .lineLimit(2)
-
-                        Text(item.name)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .font(.system(size: 9.5, weight: .medium))
-                            .lineLimit(2)
-
-                        Text(item.unit)
-                            .frame(width: 36, alignment: .center)
-                            .font(.system(size: 9.5))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(item.name)
+                                .font(.system(size: is916 ? 8.5 : 9, weight: .semibold))
+                                .lineLimit(2)
+                            if !item.model.isEmpty {
+                                Text("Mã: \(item.model)")
+                                    .font(.system(size: 7.5, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                         Text("\(item.quantity)")
-                            .frame(width: 32, alignment: .center)
-                            .font(.system(size: 9.5, weight: .semibold))
+                            .frame(width: 28, alignment: .center)
+                            .font(.system(size: 8.5, weight: .bold))
 
                         Text(formatVndCurrency(item.price))
-                            .frame(width: 80, alignment: .trailing)
-                            .font(.system(size: 9.5))
+                            .frame(width: 66, alignment: .trailing)
+                            .font(.system(size: 8))
 
                         Text(formatVndCurrency(item.total))
-                            .frame(width: 88, alignment: .trailing)
-                            .font(.system(size: 9.5, weight: .bold))
+                            .frame(width: 76, alignment: .trailing)
+                            .font(.system(size: 8.5, weight: .bold))
                     }
-                    .padding(.vertical, aspectRatio == .ratio9_16 ? 4 : 6)
-                    .padding(.horizontal, 16)
-                    .background(index % 2 == 0 ? Color.white : Color.gray.opacity(0.1))
+                    .padding(.vertical, is916 ? 3.5 : 5)
+                    .padding(.horizontal, is916 ? 10 : 12)
+                    .background(index % 2 == 0 ? Color.white : Color.gray.opacity(0.08))
 
-                    Divider().padding(.horizontal, 16)
+                    Divider().padding(.horizontal, is916 ? 10 : 12)
                 }
             }
 
-            // Total Summary Section
-            VStack(spacing: 4) {
+            // 5. Tổng Tiền & Ghi Chú
+            VStack(spacing: 3) {
                 HStack {
                     Spacer()
-                    Text("Tiền hàng (chưa thuế):")
-                        .font(.system(size: 10.5, weight: .medium))
+                    Text("Tiền hàng:")
+                        .font(.system(size: 9))
                         .foregroundColor(.secondary)
                     Text(formatVndCurrency(invoice.subtotal))
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .frame(width: 110, alignment: .trailing)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .frame(width: 85, alignment: .trailing)
                 }
 
                 if invoice.totalTax > 0 {
                     HStack {
                         Spacer()
-                        Text("Tiền thuế VAT:")
-                            .font(.system(size: 10.5, weight: .medium))
+                        Text("Thuế VAT:")
+                            .font(.system(size: 9))
                             .foregroundColor(.secondary)
                         Text(formatVndCurrency(invoice.totalTax))
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .frame(width: 110, alignment: .trailing)
+                            .font(.system(size: 9.5, weight: .medium))
+                            .frame(width: 85, alignment: .trailing)
                     }
                 }
 
                 HStack {
                     Spacer()
                     Text("TỔNG THANH TOÁN:")
-                        .font(.system(size: 12.5, weight: .bold))
+                        .font(.system(size: is916 ? 10.5 : 11.5, weight: .bold))
                         .foregroundColor(.orange)
                     Text(formatVndCurrency(invoice.totalAmount))
-                        .font(.system(size: 14.5, weight: .heavy))
+                        .font(.system(size: is916 ? 12.5 : 13.5, weight: .heavy))
                         .foregroundColor(.orange)
-                        .frame(width: 120, alignment: .trailing)
+                        .frame(width: 105, alignment: .trailing)
                 }
-                .padding(.vertical, 5)
-                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
                 .background(Color.orange.opacity(0.12))
-                .cornerRadius(6)
+                .cornerRadius(5)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
+            .padding(.horizontal, is916 ? 12 : 16)
+            .padding(.top, 6)
 
-            // Notes Section
+            // Ghi chú nếu có
             if !invoice.notes.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text("Ghi chú:")
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(.system(size: 8.5, weight: .bold))
                         .foregroundColor(.orange)
                     Text(invoice.notes)
-                        .font(.system(size: 9.5))
+                        .font(.system(size: 8))
                         .foregroundColor(.primary)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 6)
+                .padding(.horizontal, is916 ? 12 : 16)
+                .padding(.top, 4)
             }
 
-            // If ratio is 6:19 (tall), add a flexible space or generous padding
-            if aspectRatio == .ratio6_19 {
-                Spacer(minLength: 20)
+            if !is916 {
+                Spacer(minLength: 16)
             }
 
-            // Signatures Section
+            // 6. Chữ Ký
             HStack(alignment: .top) {
-                VStack(spacing: aspectRatio == .ratio9_16 ? 26 : 38) {
+                VStack(spacing: is916 ? 20 : 30) {
                     Text("NGƯỜI MUA HÀNG")
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(.system(size: 8.5, weight: .bold))
                     Text("(Ký, ghi rõ họ tên)")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 7))
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity)
 
-                VStack(spacing: aspectRatio == .ratio9_16 ? 26 : 38) {
+                VStack(spacing: is916 ? 20 : 30) {
                     Text("NGƯỜI BÁN HÀNG")
-                        .font(.system(size: 10.5, weight: .bold))
+                        .font(.system(size: 8.5, weight: .bold))
                     Text("(Ký, ghi rõ họ tên)")
-                        .font(.system(size: 8.5))
+                        .font(.system(size: 7))
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, aspectRatio == .ratio9_16 ? 18 : 26)
-            .padding(.bottom, aspectRatio == .ratio9_16 ? 20 : 28)
+            .padding(.horizontal, is916 ? 12 : 16)
+            .padding(.top, is916 ? 14 : 22)
+            .padding(.bottom, is916 ? 16 : 24)
         }
-        .frame(width: aspectRatio.paperWidth)
+        .frame(width: aspectRatio.canvasWidth)
         .background(Color.white)
         .overlay(
             Rectangle()
@@ -327,14 +425,18 @@ struct InvoicePaperView: View {
 
 // MARK: - JPG Image Generator from View
 extension View {
-    func renderAsImage(targetSize: CGSize = CGSize(width: 595, height: 842)) -> UIImage? {
+    func renderAsImage(targetSize: CGSize = CGSize(width: 390, height: 693.3)) -> UIImage? {
         let controller = UIHostingController(rootView: self.edgesIgnoringSafeArea(.all))
         guard let view = controller.view else { return nil }
 
         view.bounds = CGRect(origin: .zero, size: targetSize)
         view.backgroundColor = .white
 
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        // Use 3.0 scale for sharp Retina rendering on smartphones
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3.0
+
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
         return renderer.image { ctx in
             view.layer.render(in: ctx.cgContext)
         }

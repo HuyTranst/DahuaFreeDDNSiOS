@@ -721,13 +721,21 @@ struct InvoiceView: View {
         let invoice = buildCurrentInvoiceRecord()
         let paper = InvoicePaperView(invoice: invoice, company: invoiceMgr.companyInfo, aspectRatio: previewRatio)
 
-        let targetWidth = previewRatio.paperWidth
-        let targetHeight = previewRatio.paperHeight(itemsCount: invoice.items.count)
+        let targetWidth = previewRatio.canvasWidth
+        let targetHeight = previewRatio.canvasHeight(itemsCount: invoice.items.count)
 
         if let img = paper.renderAsImage(targetSize: CGSize(width: targetWidth, height: targetHeight)) {
-            self.exportedImage = img
-            self.showPreviewModal = false
-            self.showShareSheet = true
+            // Save directly to iOS Photo Library (Bộ sưu tập ảnh)
+            PhotoLibrarySaver.shared.saveImageToAlbum(img) { success, error in
+                self.showPreviewModal = false
+                if success {
+                    self.alertMessage = "✅ Đã lưu ảnh hóa đơn (\(previewRatio.rawValue)) thành công vào Bộ sưu tập ảnh của bạn!"
+                    self.showAlert = true
+                } else {
+                    self.alertMessage = "❌ Lỗi lưu ảnh: \(error ?? "Không rõ lỗi")"
+                    self.showAlert = true
+                }
+            }
         } else {
             alertMessage = "Không thể xuất ảnh hóa đơn!"
             showAlert = true
@@ -986,34 +994,50 @@ struct SavedInvoicesModalView: View {
                             .padding(.vertical, 20)
                     } else {
                         ForEach(filteredInvoices) { inv in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(inv.invoiceNo)
-                                        .font(.system(.subheadline, design: .monospaced).weight(.bold))
-                                        .foregroundColor(.orange)
-                                    Spacer()
-                                    Text(formatVndCurrency(inv.totalAmount))
-                                        .font(.headline.weight(.heavy))
-                                        .foregroundColor(.primary)
-                                }
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(inv.invoiceNo)
+                                            .font(.system(.subheadline, design: .monospaced).weight(.bold))
+                                            .foregroundColor(.orange)
+                                        Spacer()
+                                        Text(formatVndCurrency(inv.totalAmount))
+                                            .font(.headline.weight(.heavy))
+                                            .foregroundColor(.primary)
+                                    }
 
-                                HStack {
-                                    Text("Khách hàng: \(inv.customerName.isEmpty ? "Khách lẻ" : inv.customerName)")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Text(dateFormatter.string(from: inv.createdAt))
+                                    HStack {
+                                        Text("Khách hàng: \(inv.customerName.isEmpty ? "Khách lẻ" : inv.customerName)")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Spacer()
+                                        Text(dateFormatter.string(from: inv.createdAt))
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+
+                                    Text("\(inv.items.count) sản phẩm | \(inv.customerPhone.isEmpty ? "Không có SĐT" : inv.customerPhone)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    onLoadInvoice(inv)
+                                }
 
-                                Text("\(inv.items.count) sản phẩm | \(inv.customerPhone.isEmpty ? "Không có SĐT" : inv.customerPhone)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                onLoadInvoice(inv)
+                                // Nút Xóa trực quan bên phải
+                                Button(action: {
+                                    if let actualIdx = invoiceMgr.savedInvoices.firstIndex(where: { $0.id == inv.id }) {
+                                        invoiceMgr.deleteInvoice(at: IndexSet(integer: actualIdx))
+                                    }
+                                }) {
+                                    Image(systemName: "trash")
+                                        .foregroundColor(.red)
+                                        .padding(8)
+                                        .background(Color.red.opacity(0.1))
+                                        .clipShape(Circle())
+                                }
+                                .buttonStyle(BorderlessButtonStyle())
                             }
                         }
                         .onDelete { indexSet in
@@ -1138,8 +1162,8 @@ struct InvoicePreviewModalView: View {
 
                     Button(action: onExportJpg) {
                         HStack(spacing: 6) {
-                            Image(systemName: "photo.badge.arrow.down.fill")
-                            Text("XUẤT ẢNH \(selectedRatio.rawValue) GỬI KHÁCH")
+                            Image(systemName: "square.and.arrow.down.fill")
+                            Text("LƯU ẢNH \(selectedRatio.rawValue) VÀO BỘ SƯU TẬP")
                                 .font(.body.weight(.bold))
                         }
                         .foregroundColor(.white)
