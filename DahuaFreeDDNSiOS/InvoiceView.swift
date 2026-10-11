@@ -711,7 +711,7 @@ struct InvoiceView: View {
                         self.customerAddress = data.address
                     }
                 case .failure(let err):
-                    self.alertMessage = err
+                    self.alertMessage = err.localizedDescription
                     self.showAlert = true
                 }
             }

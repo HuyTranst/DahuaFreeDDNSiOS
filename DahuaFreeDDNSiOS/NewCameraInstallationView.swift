@@ -579,7 +579,7 @@ struct NewCameraInstallationView: View {
                     self.installLocation = data.address
                     self.installGoogleUrl = data.url
                 case .failure(let err):
-                    self.alertMessage = err
+                    self.alertMessage = err.localizedDescription
                     self.showAlert = true
                 }
             }

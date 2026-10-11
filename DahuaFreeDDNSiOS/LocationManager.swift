@@ -2,6 +2,11 @@ import Foundation
 import CoreLocation
 import UIKit
 
+struct LocationError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationManager()
 
@@ -11,7 +16,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var lastGoogleUrl: String = ""
     @Published var errorMessage: String? = nil
 
-    private var completionHandler: ((Result<(address: String, url: String, lat: Double, lon: Double), String>) -> Void)?
+    private var completionHandler: ((Result<(address: String, url: String, lat: Double, lon: Double), LocationError>) -> Void)?
 
     override init() {
         super.init()
@@ -20,7 +25,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 
     /// Lấy vị trí GPS hiện tại, reverse geocode sang địa chỉ tiếng Việt và sinh link Google Maps
-    func requestCurrentLocation(completion: @escaping (Result<(address: String, url: String, lat: Double, lon: Double), String>) -> Void) {
+    func requestCurrentLocation(completion: @escaping (Result<(address: String, url: String, lat: Double, lon: Double), LocationError>) -> Void) {
         self.completionHandler = completion
         self.isLocating = true
         self.errorMessage = nil
@@ -39,7 +44,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             self.isLocating = false
             let err = "Ứng dụng chưa được cấp quyền vị trí. Vui lòng vào Cài đặt máy > Quyền riêng tư > Định vị để cho phép."
             self.errorMessage = err
-            self.completionHandler?(.failure(err))
+            self.completionHandler?(.failure(LocationError(message: err)))
             self.completionHandler = nil
         case .authorizedWhenInUse, .authorizedAlways:
             clManager.requestLocation()
@@ -65,7 +70,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 self.isLocating = false
                 let err = "Quyền định vị bị từ chối."
                 self.errorMessage = err
-                self.completionHandler?(.failure(err))
+                self.completionHandler?(.failure(LocationError(message: err)))
                 self.completionHandler = nil
             }
         }
@@ -134,7 +139,7 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         DispatchQueue.main.async {
             self.isLocating = false
             self.errorMessage = msg
-            self.completionHandler?(.failure(msg))
+            self.completionHandler?(.failure(LocationError(message: msg)))
             self.completionHandler = nil
         }
     }
