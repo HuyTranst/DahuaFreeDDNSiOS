@@ -13,6 +13,9 @@ struct InvoiceView: View {
     @State private var customerName: String = ""
     @State private var customerPhone: String = ""
     @State private var customerAddress: String = ""
+    @State private var customerGoogleLocation: String = ""
+    @State private var customerGoogleLocationUrl: String = ""
+    @State private var isFetchingLocation: Bool = false
     @State private var invoiceDate: Date = Date()
     @State private var warrantyMonths: Int = 24
     @State private var invoiceNo: String = ""
@@ -261,13 +264,62 @@ struct InvoiceView: View {
                     .background(Color.gray.opacity(0.08))
                     .cornerRadius(8)
 
-                    HStack {
-                        Image(systemName: "mappin.and.ellipse").foregroundColor(.orange).frame(width: 20)
-                        TextField("Địa chỉ lắp đặt", text: $customerAddress)
+                    // Địa chỉ lắp đặt (1: tự đánh, 2: vị trí Google)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Image(systemName: "mappin.and.ellipse").foregroundColor(.orange).frame(width: 20)
+                            TextField("Địa chỉ lắp đặt (tự đánh)", text: $customerAddress)
+
+                            Button(action: fetchCustomerLocation) {
+                                HStack(spacing: 4) {
+                                    if isFetchingLocation {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.7)
+                                    } else {
+                                        Image(systemName: "location.fill")
+                                            .font(.caption)
+                                    }
+                                    Text("Lấy Vị Trí")
+                                        .font(.caption2.weight(.bold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(Color.blue)
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                        }
+                        .padding(10)
+                        .background(Color.gray.opacity(0.08))
+                        .cornerRadius(8)
+
+                        if !customerGoogleLocation.isEmpty || !customerGoogleLocationUrl.isEmpty {
+                            HStack(alignment: .top, spacing: 6) {
+                                Image(systemName: "globe.asia.australia.fill")
+                                    .foregroundColor(.green)
+                                    .font(.caption)
+                                    .padding(.top, 2)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Vị trí Google: \(customerGoogleLocation)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                    if !customerGoogleLocationUrl.isEmpty, let url = URL(string: customerGoogleLocationUrl) {
+                                        Button(action: { UIApplication.shared.open(url) }) {
+                                            Text("Xem trên Google Maps >")
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(.blue)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 4)
+                        }
                     }
-                    .padding(10)
-                    .background(Color.gray.opacity(0.08))
-                    .cornerRadius(8)
 
                     HStack {
                         Image(systemName: "shield.fill").foregroundColor(.orange).frame(width: 20)
@@ -638,10 +690,32 @@ struct InvoiceView: View {
         customerName = ""
         customerPhone = ""
         customerAddress = ""
+        customerGoogleLocation = ""
+        customerGoogleLocationUrl = ""
         invoiceItems.removeAll()
         warrantyMonths = 24
         invoiceNotes = "Tặng hộp chống nước, Tặng dây điện 2m theo cam, bảo hành 2 năm"
         currentStep = 1
+    }
+
+    private func fetchCustomerLocation() {
+        isFetchingLocation = true
+        LocationManager.shared.requestCurrentLocation { result in
+            DispatchQueue.main.async {
+                self.isFetchingLocation = false
+                switch result {
+                case .success(let data):
+                    self.customerGoogleLocation = data.address
+                    self.customerGoogleLocationUrl = data.url
+                    if self.customerAddress.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        self.customerAddress = data.address
+                    }
+                case .failure(let err):
+                    self.alertMessage = err
+                    self.showAlert = true
+                }
+            }
+        }
     }
 
     private func selectPresetProduct(_ preset: PresetProduct) {
@@ -697,6 +771,8 @@ struct InvoiceView: View {
             customerName: customerName,
             customerPhone: customerPhone,
             customerAddress: customerAddress,
+            googleLocation: customerGoogleLocation,
+            googleLocationUrl: customerGoogleLocationUrl,
             items: invoiceItems,
             notes: invoiceNotes
         )
@@ -720,6 +796,8 @@ struct InvoiceView: View {
         customerName = record.customerName
         customerPhone = record.customerPhone
         customerAddress = record.customerAddress
+        customerGoogleLocation = record.googleLocation
+        customerGoogleLocationUrl = record.googleLocationUrl
         invoiceItems = record.items
         invoiceNotes = record.notes
         currentStep = 2
@@ -820,6 +898,75 @@ struct CompanySetupModalView: View {
     }
 }
 
+// MARK: - Edit Product Modal View (Chỉnh sửa sản phẩm kho)
+struct EditProductModalView: View {
+    @ObservedObject var invoiceMgr: InvoiceManager
+    @State var product: PresetProduct
+    @Environment(\.presentationMode) var presentationMode
+
+    @State private var model: String = ""
+    @State private var name: String = ""
+    @State private var unit: String = ""
+    @State private var priceText: String = ""
+
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Thông tin sản phẩm")) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Mã Model:").font(.caption).foregroundColor(.secondary)
+                        TextField("Model sản phẩm", text: $model)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Tên sản phẩm *:").font(.caption).foregroundColor(.secondary)
+                        TextField("Tên sản phẩm", text: $name)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Đơn vị tính (ĐVT):").font(.caption).foregroundColor(.secondary)
+                        TextField("VD: Cái, Bộ, Mét...", text: $unit)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Đơn giá (VNĐ):").font(.caption).foregroundColor(.secondary)
+                        TextField("Đơn giá", text: $priceText)
+                            .keyboardType(.numbersAndPunctuation)
+                    }
+                }
+            }
+            .navigationTitle("Sửa Sản Phẩm")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Hủy") { presentationMode.wrappedValue.dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Lưu") {
+                        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedName.isEmpty else { return }
+                        var updated = product
+                        updated.model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+                        updated.name = trimmedName
+                        updated.unit = unit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Cái" : unit
+                        updated.price = parseVndCurrency(priceText)
+                        invoiceMgr.updateProduct(updated)
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                    .font(.headline)
+                    .foregroundColor(.orange)
+                }
+            }
+            .onAppear {
+                model = product.model
+                name = product.name
+                unit = product.unit
+                priceText = formatVndCurrency(product.price).replacingOccurrences(of: "đ", with: "")
+            }
+        }
+    }
+}
+
 // MARK: - Product Library Modal View (Quản lý kho sản phẩm)
 struct ProductLibraryModalView: View {
     @ObservedObject var invoiceMgr: InvoiceManager
@@ -830,6 +977,7 @@ struct ProductLibraryModalView: View {
     @State private var newName: String = ""
     @State private var newUnit: String = "Cái"
     @State private var newPriceText: String = ""
+    @State private var editingProduct: PresetProduct? = nil
 
     var body: some View {
         NavigationView {
@@ -878,7 +1026,7 @@ struct ProductLibraryModalView: View {
                 // List of products
                 List {
                     ForEach(invoiceMgr.savedProducts) { product in
-                        HStack {
+                        HStack(spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(product.name)
                                     .font(.subheadline.weight(.semibold))
@@ -894,6 +1042,16 @@ struct ProductLibraryModalView: View {
                             Text(formatVndCurrency(product.price))
                                 .font(.subheadline.weight(.bold))
                                 .foregroundColor(.orange)
+
+                            // Nút hình cây viết để sửa thông tin sản phẩm
+                            Button(action: {
+                                editingProduct = product
+                            }) {
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.orange)
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
 
                             Button(action: {
                                 onSelectProduct(product)
@@ -920,6 +1078,9 @@ struct ProductLibraryModalView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Đóng") { presentationMode.wrappedValue.dismiss() }
                 }
+            }
+            .sheet(item: $editingProduct) { prod in
+                EditProductModalView(invoiceMgr: invoiceMgr, product: prod)
             }
         }
     }
@@ -964,7 +1125,8 @@ struct SavedInvoicesModalView: View {
         return invoiceMgr.savedInvoices.filter { inv in
             inv.customerName.lowercased().contains(query) ||
             inv.customerPhone.lowercased().contains(query) ||
-            inv.invoiceNo.lowercased().contains(query)
+            inv.invoiceNo.lowercased().contains(query) ||
+            inv.customerAddress.lowercased().contains(query)
         }
     }
 
@@ -1025,16 +1187,45 @@ struct SavedInvoicesModalView: View {
                                             .foregroundColor(.secondary)
                                     }
 
-                                    Text("\(inv.items.count) sản phẩm | \(inv.customerPhone.isEmpty ? "Không có SĐT" : inv.customerPhone)")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                    if !inv.customerAddress.isEmpty {
+                                        Text("ĐC: \(inv.customerAddress)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                    }
+
+                                    HStack {
+                                        Text("\(inv.items.count) sản phẩm | \(inv.customerPhone.isEmpty ? "Không có SĐT" : inv.customerPhone)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+
+                                        Spacer()
+
+                                        if !inv.googleLocationUrl.isEmpty {
+                                            Button(action: {
+                                                if let url = URL(string: inv.googleLocationUrl) {
+                                                    UIApplication.shared.open(url)
+                                                }
+                                            }) {
+                                                HStack(spacing: 3) {
+                                                    Image(systemName: "location.fill")
+                                                    Text("Xem vị trí")
+                                                }
+                                                .font(.system(size: 11, weight: .semibold))
+                                                .foregroundColor(.blue)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 3)
+                                                .background(Color.blue.opacity(0.12))
+                                                .cornerRadius(5)
+                                            }
+                                            .buttonStyle(BorderlessButtonStyle())
+                                        }
+                                    }
                                 }
                                 .contentShape(Rectangle())
                                 .onTapGesture {
                                     onLoadInvoice(inv)
                                 }
-
-
                             }
                         }
                         .onDelete { indexSet in

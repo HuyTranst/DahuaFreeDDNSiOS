@@ -28,6 +28,10 @@
 	<string>Ứng dụng cần quyền lưu ảnh để lưu hóa đơn bán hàng camera trực tiếp vào Album Bộ sưu tập ảnh của bạn.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Ứng dụng cần quyền truy cập Album ảnh để lưu hóa đơn bán hàng camera vào Bộ sưu tập.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần quyền vị trí để định vị vị trí lắp đặt camera và lưu tọa độ Google Maps.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Ứng dụng cần quyền vị trí để định vị vị trí lắp đặt camera và lưu tọa độ Google Maps.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_dahua._udp</string>

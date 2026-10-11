@@ -590,6 +590,7 @@ struct ContentView: View {
         case calcStorage
         case calcBandwidth
         case calcData4G
+        case newCameraInstall
         case productInfo
 
         var id: String {
@@ -606,6 +607,7 @@ struct ContentView: View {
             case .calcStorage: return "calcStorage"
             case .calcBandwidth: return "calcBandwidth"
             case .calcData4G: return "calcData4G"
+            case .newCameraInstall: return "newCameraInstall"
             case .productInfo: return "productInfo"
             }
         }
@@ -907,6 +909,15 @@ struct ContentView: View {
                             }
                         }
                 }
+            case .newCameraInstall:
+                NavigationView {
+                    NewCameraInstallationView()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { activeModalType = nil }
+                            }
+                        }
+                }
             case .productInfo:
                 NavigationView {
                     sanPhamView
@@ -968,9 +979,15 @@ struct ContentView: View {
             }
 
             Button(action: {
+                self.activeModalType = .newCameraInstall
+            }) {
+                Label("8. Tìm Camera Mới Lắp", systemImage: "camera.badge.ellipsis")
+            }
+
+            Button(action: {
                 self.activeModalType = .productInfo
             }) {
-                Label("8. Thông Tin Sản Phẩm", systemImage: "info.circle.fill")
+                Label("9. Thông Tin Sản Phẩm", systemImage: "info.circle.fill")
             }
         } label: {
             Image(systemName: "line.3.horizontal")

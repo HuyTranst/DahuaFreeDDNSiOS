@@ -51,9 +51,60 @@ struct InvoiceRecord: Identifiable, Codable, Equatable {
     var customerName: String
     var customerPhone: String
     var customerAddress: String
+    var googleLocation: String = ""
+    var googleLocationUrl: String = ""
     var items: [InvoiceItem]
     var notes: String
     var createdAt: Date = Date()
+
+    enum CodingKeys: String, CodingKey {
+        case id, invoiceNo, date, warrantyMonths, customerName, customerPhone, customerAddress
+        case googleLocation, googleLocationUrl, items, notes, createdAt
+    }
+
+    init(
+        id: UUID = UUID(),
+        invoiceNo: String,
+        date: Date,
+        warrantyMonths: Int,
+        customerName: String,
+        customerPhone: String,
+        customerAddress: String,
+        googleLocation: String = "",
+        googleLocationUrl: String = "",
+        items: [InvoiceItem],
+        notes: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.invoiceNo = invoiceNo
+        self.date = date
+        self.warrantyMonths = warrantyMonths
+        self.customerName = customerName
+        self.customerPhone = customerPhone
+        self.customerAddress = customerAddress
+        self.googleLocation = googleLocation
+        self.googleLocationUrl = googleLocationUrl
+        self.items = items
+        self.notes = notes
+        self.createdAt = createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        invoiceNo = try container.decode(String.self, forKey: .invoiceNo)
+        date = try container.decode(Date.self, forKey: .date)
+        warrantyMonths = try container.decode(Int.self, forKey: .warrantyMonths)
+        customerName = try container.decode(String.self, forKey: .customerName)
+        customerPhone = try container.decode(String.self, forKey: .customerPhone)
+        customerAddress = try container.decode(String.self, forKey: .customerAddress)
+        googleLocation = try container.decodeIfPresent(String.self, forKey: .googleLocation) ?? ""
+        googleLocationUrl = try container.decodeIfPresent(String.self, forKey: .googleLocationUrl) ?? ""
+        items = try container.decode([InvoiceItem].self, forKey: .items)
+        notes = try container.decode(String.self, forKey: .notes)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+    }
 
     var subtotal: Double {
         items.reduce(0) { $0 + $1.subtotal }
@@ -66,6 +117,28 @@ struct InvoiceRecord: Identifiable, Codable, Equatable {
     var totalAmount: Double {
         items.reduce(0) { $0 + $1.total }
     }
+}
+
+// MARK: - Camera Installation Record Models (Lịch Sử Lắp Camera)
+struct InstalledCameraItem: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var ip: String
+    var serialNo: String
+    var model: String
+    var mac: String
+    var brand: String
+}
+
+struct CameraInstallRecord: Identifiable, Codable, Equatable {
+    var id: UUID = UUID()
+    var customerName: String
+    var customerPhone: String
+    var date: Date
+    var googleLocation: String
+    var googleLocationUrl: String
+    var cameras: [InstalledCameraItem]
+    var notes: String = ""
+    var createdAt: Date = Date()
 }
 
 // MARK: - Invoice Manager (Local Persistence via UserDefaults)
@@ -84,9 +157,14 @@ class InvoiceManager: ObservableObject {
         didSet { saveInvoices() }
     }
 
+    @Published var savedInstallRecords: [CameraInstallRecord] = [] {
+        didSet { saveInstallRecords() }
+    }
+
     private let companyKey = "cctv_company_info"
     private let productsKey = "cctv_saved_products"
     private let invoicesKey = "cctv_saved_invoices"
+    private let installRecordsKey = "cctv_saved_install_records"
 
     init() {
         // Load company info
@@ -123,6 +201,12 @@ class InvoiceManager: ObservableObject {
            let decoded = try? JSONDecoder().decode([InvoiceRecord].self, from: data) {
             self.savedInvoices = decoded
         }
+
+        // Load camera install records
+        if let data = UserDefaults.standard.data(forKey: installRecordsKey),
+           let decoded = try? JSONDecoder().decode([CameraInstallRecord].self, from: data) {
+            self.savedInstallRecords = decoded
+        }
     }
 
     func saveCompanyInfo() {
@@ -143,8 +227,20 @@ class InvoiceManager: ObservableObject {
         }
     }
 
+    func saveInstallRecords() {
+        if let encoded = try? JSONEncoder().encode(savedInstallRecords) {
+            UserDefaults.standard.set(encoded, forKey: installRecordsKey)
+        }
+    }
+
     func addProduct(_ product: PresetProduct) {
         savedProducts.insert(product, at: 0)
+    }
+
+    func updateProduct(_ product: PresetProduct) {
+        if let idx = savedProducts.firstIndex(where: { $0.id == product.id }) {
+            savedProducts[idx] = product
+        }
     }
 
     func deleteProduct(at indexSet: IndexSet) {
@@ -162,6 +258,18 @@ class InvoiceManager: ObservableObject {
 
     func deleteInvoice(at indexSet: IndexSet) {
         savedInvoices.remove(atOffsets: indexSet)
+    }
+
+    func addInstallRecord(_ record: CameraInstallRecord) {
+        if let idx = savedInstallRecords.firstIndex(where: { $0.id == record.id }) {
+            savedInstallRecords[idx] = record
+        } else {
+            savedInstallRecords.insert(record, at: 0)
+        }
+    }
+
+    func deleteInstallRecord(at indexSet: IndexSet) {
+        savedInstallRecords.remove(atOffsets: indexSet)
     }
 }
 

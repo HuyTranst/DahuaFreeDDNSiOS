@@ -13,6 +13,8 @@
 		A10000042C9F000000000004 /* InvoiceManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000042C9F000000000004 /* InvoiceManager.swift */; };
 		A10000052C9F000000000005 /* InvoicePaperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000052C9F000000000005 /* InvoicePaperView.swift */; };
 		A10000062C9F000000000006 /* InvoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000062C9F000000000006 /* InvoiceView.swift */; };
+		A10000072C9F000000000007 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000072C9F000000000007 /* LocationManager.swift */; };
+		A10000082C9F000000000008 /* NewCameraInstallationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000082C9F000000000008 /* NewCameraInstallationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,6 +25,8 @@
 		B10000042C9F000000000004 /* InvoiceManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvoiceManager.swift; path = InvoiceManager.swift; sourceTree = "<group>"; };
 		B10000052C9F000000000005 /* InvoicePaperView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvoicePaperView.swift; path = InvoicePaperView.swift; sourceTree = "<group>"; };
 		B10000062C9F000000000006 /* InvoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = InvoiceView.swift; path = InvoiceView.swift; sourceTree = "<group>"; };
+		B10000072C9F000000000007 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LocationManager.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		B10000082C9F000000000008 /* NewCameraInstallationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NewCameraInstallationView.swift; path = NewCameraInstallationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +57,8 @@
 				B10000042C9F000000000004 /* InvoiceManager.swift */,
 				B10000052C9F000000000005 /* InvoicePaperView.swift */,
 				B10000062C9F000000000006 /* InvoiceView.swift */,
+				B10000072C9F000000000007 /* LocationManager.swift */,
+				B10000082C9F000000000008 /* NewCameraInstallationView.swift */,
 			);
 			name = DahuaFreeDDNSiOS;
 			sourceTree = "<group>";
@@ -128,6 +134,8 @@
 				A10000042C9F000000000004 /* InvoiceManager.swift in Sources */,
 				A10000052C9F000000000005 /* InvoicePaperView.swift in Sources */,
 				A10000062C9F000000000006 /* InvoiceView.swift in Sources */,
+				A10000072C9F000000000007 /* LocationManager.swift in Sources */,
+				A10000082C9F000000000008 /* NewCameraInstallationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -32,6 +32,7 @@ jobs:
                  -framework CoreImage \
                  -framework Network \
                  -framework CryptoKit \
+                 -framework CoreLocation \
                  DahuaFreeDDNSiOS/*.swift \
                  -o DahuaFreeDDNS 2>&1 | tee compile.log
 
